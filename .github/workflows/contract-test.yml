@@ -1,7 +1,5 @@
 name: Contract tests
 
-# Runs automatically whenever anything under contract/ is pushed,
-# and can also be triggered manually from the Actions tab.
 on:
   push:
     paths:
@@ -14,6 +12,10 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
+
+      - name: Work around a known ethnum/Rust incompatibility
+        working-directory: contract
+        run: cargo update -p ethnum
 
       - name: Run the contract's unit tests
         working-directory: contract
