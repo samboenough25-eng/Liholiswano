@@ -1,0 +1,20 @@
+name: Contract tests
+
+# Runs automatically whenever anything under contract/ is pushed,
+# and can also be triggered manually from the Actions tab.
+on:
+  push:
+    paths:
+      - "contract/**"
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Run the contract's unit tests
+        working-directory: contract
+        run: cargo test
