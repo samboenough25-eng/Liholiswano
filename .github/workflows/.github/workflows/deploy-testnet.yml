@@ -15,7 +15,7 @@ jobs:
 
       - name: Work around a known ethnum/Rust incompatibility
         working-directory: contract
-        run: cargo update -p ethnum
+        run: cargo update -p ethnum --precise 1.5.3
 
       - name: Confirm the contract's tests still pass
         working-directory: contract
