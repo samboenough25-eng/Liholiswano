@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Liholiswano — On-Chain Pilot</title>
+<style>
+  :root {
+    --navy: #1B2A4A; --gold: #C98A2C; --cream: #FAF7F0; --line: #E4DFD3;
+    --muted: #5B6472; --good: #3F7D58; --bad: #B4432D; --panel: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --navy: #E8ECF5; --gold: #E0A94A; --cream: #14171f; --line: #2b2f3a;
+      --muted: #9aa3b5; --good: #6fbf8b; --bad: #e07a63; --panel: #1c2029;
+    }
+  }
+  :root[data-theme="dark"] {
+    --navy: #E8ECF5; --gold: #E0A94A; --cream: #14171f; --line: #2b2f3a;
+    --muted: #9aa3b5; --good: #6fbf8b; --bad: #e07a63; --panel: #1c2029;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--cream); color: var(--navy); font-family: 'Segoe UI', system-ui, sans-serif; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 24px 20px 60px; }
+  h1 { font-family: Georgia, serif; font-size: 21px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .panel h2 { font-family: Georgia, serif; font-size: 15px; margin: 0 0 10px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  input, select { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--cream); color: var(--navy); font-size: 13px; margin-bottom: 8px; }
+  .row { display: flex; gap: 8px; }
+  .row > div { flex: 1; }
+  button { cursor: pointer; font-family: inherit; padding: 9px 14px; border-radius: 6px; border: none; background: var(--navy); color: var(--cream); font-size: 13px; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: transparent; color: var(--navy); border: 1px solid var(--navy); }
+  .status { font-size: 12px; padding: 8px 10px; border-radius: 5px; margin-top: 8px; white-space: pre-wrap; word-break: break-all; }
+  .status.ok { background: rgba(63,125,88,0.12); color: var(--good); }
+  .status.err { background: rgba(180,67,45,0.12); color: var(--bad); }
+  .status.pending { background: rgba(91,100,114,0.12); color: var(--muted); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: var(--line); color: var(--navy); }
+  .members { font-size: 12px; }
+  .members table { width: 100%; border-collapse: collapse; }
+  .members td, .members th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; }
+  .warn { font-size: 12px; color: var(--bad); border: 1px solid var(--bad); border-radius: 6px; padding: 10px; margin-bottom: 16px; }
+  code { background: var(--line); padding: 1px 4px; border-radius: 3px; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Liholiswano — on-chain pilot</h1>
+  <p class="sub">Talks directly to the Soroban smart contract on Stellar Testnet. Real token transfers, no backend server. Requires the <a href="https://www.freighter.app/" target="_blank" rel="noopener">Freighter wallet</a> extension.</p>
+
+  <div class="warn">
+    <strong>Testnet pilot only.</strong> This has not been run against a live network from the environment that generated it — review the contract calls before trusting it with real value, and start on Testnet with play-money tokens, never Mainnet, until your group has verified it independently.
+  </div>
+
+  <div class="panel">
+    <h2>1. Connect &amp; configure</h2>
+    <label>Contract ID (from <code>soroban contract deploy</code>)</label>
+    <input id="contractId" placeholder="C..." />
+    <label>Token contract ID (the asset used for contributions/collateral)</label>
+    <input id="tokenId" placeholder="C... (e.g. a testnet SAC for a custom asset)" />
+    <label>Soroban RPC URL</label>
+    <input id="rpcUrl" value="https://soroban-testnet.stellar.org" />
+    <label>Network passphrase</label>
+    <input id="networkPassphrase" value="Test SDF Network ; September 2015" />
+    <div class="row">
+      <button id="connectBtn">Connect Freighter</button>
+      <button class="secondary" id="saveConfigBtn">Save config</button>
+    </div>
+    <div id="connectStatus" class="status pending" style="display:none;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Create a group (admin only, once)</h2>
+    <div class="row">
+      <div><label>Group ID (short symbol, e.g. LHS1)</label><input id="groupIdCreate" /></div>
+      <div><label>Max members</label><input id="maxMembers" type="number" value="10" /></div>
+    </div>
+    <div class="row">
+      <div><label>Contribution per round (base units)</label><input id="contribution" type="number" value="100" /></div>
+      <div><label>Collateral (base units)</label><input id="collateral" type="number" value="1000" /></div>
+    </div>
+    <label>Max bid (% of pot)</label>
+    <input id="maxBidPct" type="number" value="20" />
+    <button id="createGroupBtn">Create group</button>
+    <div id="createStatus" class="status pending" style="display:none;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>3. Join / act on a group</h2>
+    <label>Group ID</label>
+    <input id="groupId" placeholder="LHS1" />
+    <div class="row">
+      <button id="loadGroupBtn" class="secondary">Load group state</button>
+      <button id="joinBtn">Join group</button>
+    </div>
+    <div class="row">
+      <button id="lockBtn" class="secondary">Lock group (admin)</button>
+      <button id="contributeBtn">Contribute this round</button>
+    </div>
+    <div class="row">
+      <div><label>Bid (% of pot)</label><input id="bidPct" type="number" value="0" /></div>
+      <div style="align-self:flex-end;"><button id="bidBtn">Submit bid</button></div>
+    </div>
+    <button id="settleBtn" class="secondary">Settle round (anyone can call once ready)</button>
+    <div class="row" style="margin-top:8px;">
+      <div><label>Member address to mark defaulted (admin)</label><input id="defaultAddr" /></div>
+      <div style="align-self:flex-end;"><button id="defaultBtn" class="secondary">Mark default</button></div>
+    </div>
+    <div id="actionStatus" class="status pending" style="display:none;"></div>
+  </div>
+
+  <div class="panel" id="stateBox" style="display:none;">
+    <h2>Group state</h2>
+    <div id="stateSummary" style="font-size:13px; margin-bottom:8px;"></div>
+    <div class="members"><table id="membersTable"></table></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@stellar/stellar-sdk@12.3.0/dist/stellar-sdk.min.js"></script>
+<script>
+/*
+ * Liholiswano on-chain pilot — thin browser client for the Soroban contract.
+ *
+ * IMPORTANT — read before trusting this against real funds:
+ * This file was written and syntax-checked, but never executed against a
+ * live Soroban RPC endpoint or a real Freighter wallet, because the
+ * environment that generated it has no network access to Stellar's testnet
+ * or mainnet. The @stellar/stellar-sdk method names and Freighter API shape
+ * below match the documented interface as of this writing, but Soroban
+ * tooling changes fairly often — if something here throws about a missing
+ * method, check the current @stellar/stellar-sdk docs for a renamed
+ * equivalent before assuming the contract itself is broken.
+ *
+ * What this does NOT do (pilot scope):
+ * - No retry/rebroadcast logic if a transaction times out waiting for
+ *   confirmation — you'll see a raw status and may need to reload state.
+ * - No estimation/adjustment of resource fees beyond the SDK's default
+ *   simulate-then-assemble flow.
+ * - Every action is a separate signed transaction — no batching.
+ */
+
+const CONFIG_KEY = "liholiswano_onchain_config";
+
+function loadConfig() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) || "{}");
+    if (saved.contractId) document.getElementById("contractId").value = saved.contractId;
+    if (saved.tokenId) document.getElementById("tokenId").value = saved.tokenId;
+    if (saved.rpcUrl) document.getElementById("rpcUrl").value = saved.rpcUrl;
+    if (saved.networkPassphrase) document.getElementById("networkPassphrase").value = saved.networkPassphrase;
+  } catch {}
+}
+function saveConfig() {
+  const cfg = {
+    contractId: document.getElementById("contractId").value.trim(),
+    tokenId: document.getElementById("tokenId").value.trim(),
+    rpcUrl: document.getElementById("rpcUrl").value.trim(),
+    networkPassphrase: document.getElementById("networkPassphrase").value.trim(),
+  };
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg));
+  return cfg;
+}
+loadConfig();
+
+let freighterPublicKey = null;
+
+function setStatus(elId, text, kind) {
+  const el = document.getElementById(elId);
+  el.style.display = "block";
+  el.className = "status " + kind;
+  el.textContent = text;
+}
+
+async function getFreighter() {
+  // Freighter injects window.freighterApi when the extension is installed.
+  if (!window.freighterApi) {
+    throw new Error("Freighter extension not detected. Install it from freighter.app and reload this page.");
+  }
+  return window.freighterApi;
+}
+
+document.getElementById("connectBtn").addEventListener("click", async () => {
+  try {
+    setStatus("connectStatus", "Connecting…", "pending");
+    const freighter = await getFreighter();
+    const access = await freighter.requestAccess();
+    if (access && access.error) throw new Error(access.error);
+    const addr = await freighter.getAddress();
+    freighterPublicKey = addr.address || addr; // API has returned either shape across versions
+    setStatus("connectStatus", "Connected: " + freighterPublicKey, "ok");
+  } catch (err) {
+    setStatus("connectStatus", "Connect failed: " + err.message, "err");
+  }
+});
+
+document.getElementById("saveConfigBtn").addEventListener("click", () => {
+  saveConfig();
+  setStatus("connectStatus", "Config saved locally in this browser.", "ok");
+});
+
+function getServer() {
+  const rpcUrl = document.getElementById("rpcUrl").value.trim();
+  return new StellarSdk.SorobanRpc.Server(rpcUrl, { allowHttp: rpcUrl.startsWith("http://") });
+}
+
+function getNetworkPassphrase() {
+  return document.getElementById("networkPassphrase").value.trim();
+}
+
+// Builds, simulates, signs (via Freighter), submits, and polls a contract
+// call to completion. `args` must already be soroban-sdk ScVal values built
+// with StellarSdk.nativeToScVal / StellarSdk.Address, etc.
+async function callContract(contractId, method, args, sourcePublicKey) {
+  if (!freighterPublicKey) throw new Error("Connect Freighter first.");
+  const server = getServer();
+  const networkPassphrase = getNetworkPassphrase();
+
+  const account = await server.getAccount(sourcePublicKey || freighterPublicKey);
+  const contract = new StellarSdk.Contract(contractId);
+
+  let tx = new StellarSdk.TransactionBuilder(account, {
+    fee: StellarSdk.BASE_FEE,
+    networkPassphrase,
+  })
+    .addOperation(contract.call(method, ...args))
+    .setTimeout(60)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (StellarSdk.SorobanRpc.Api.isSimulationError(sim)) {
+    throw new Error("Simulation failed: " + sim.error);
+  }
+  tx = StellarSdk.SorobanRpc.assembleTransaction(tx, sim).build();
+
+  const freighter = await getFreighter();
+  const signed = await freighter.signTransaction(tx.toXDR(), {
+    networkPassphrase,
+    address: freighterPublicKey,
+  });
+  const signedXdr = signed.signedTxXdr || signed; // API has returned either shape across versions
+  const signedTx = StellarSdk.TransactionBuilder.fromXDR(signedXdr, networkPassphrase);
+
+  const sendResult = await server.sendTransaction(signedTx);
+  if (sendResult.status === "ERROR") {
+    throw new Error("Submit failed: " + JSON.stringify(sendResult.errorResult));
+  }
+
+  // Poll for the result — pilot-scope simplicity, not production retry logic.
+  let getResult = await server.getTransaction(sendResult.hash);
+  let attempts = 0;
+  while (getResult.status === "NOT_FOUND" && attempts < 15) {
+    await new Promise((r) => setTimeout(r, 2000));
+    getResult = await server.getTransaction(sendResult.hash);
+    attempts++;
+  }
+  if (getResult.status !== "SUCCESS") {
+    throw new Error("Transaction did not succeed: " + JSON.stringify(getResult));
+  }
+  return getResult;
+}
+
+function addr(publicKey) {
+  return StellarSdk.nativeToScVal(new StellarSdk.Address(publicKey), { type: "address" });
+}
+function sym(s) {
+  return StellarSdk.nativeToScVal(s, { type: "symbol" });
+}
+function i128(n) {
+  return StellarSdk.nativeToScVal(BigInt(n), { type: "i128" });
+}
+function u32v(n) {
+  return StellarSdk.nativeToScVal(n, { type: "u32" });
+}
+
+document.getElementById("createGroupBtn").addEventListener("click", async () => {
+  try {
+    setStatus("createStatus", "Submitting create_group…", "pending");
+    const cfg = saveConfig();
+    const groupId = document.getElementById("groupIdCreate").value.trim();
+    const contribution = document.getElementById("contribution").value;
+    const collateral = document.getElementById("collateral").value;
+    const maxBidBps = Math.round(parseFloat(document.getElementById("maxBidPct").value) * 100);
+    const maxMembers = document.getElementById("maxMembers").value;
+
+    const result = await callContract(cfg.contractId, "create_group", [
+      sym(groupId),
+      addr(freighterPublicKey),
+      addr(cfg.tokenId),
+      i128(contribution),
+      i128(collateral),
+      u32v(maxBidBps),
+      u32v(parseInt(maxMembers, 10)),
+    ]);
+    setStatus("createStatus", "Group created. Tx: " + result.hash, "ok");
+  } catch (err) {
+    setStatus("createStatus", "Failed: " + err.message, "err");
+  }
+});
+
+document.getElementById("joinBtn").addEventListener("click", () => simpleAction("join_group", [sym(gid()), addr(freighterPublicKey)]));
+document.getElementById("lockBtn").addEventListener("click", () => simpleAction("lock_group", [sym(gid()), addr(freighterPublicKey)]));
+document.getElementById("contributeBtn").addEventListener("click", () => simpleAction("contribute", [sym(gid()), addr(freighterPublicKey)]));
+document.getElementById("settleBtn").addEventListener("click", () => simpleAction("settle_round", [sym(gid())]));
+document.getElementById("bidBtn").addEventListener("click", () => {
+  const bps = Math.round(parseFloat(document.getElementById("bidPct").value) * 100);
+  simpleAction("submit_bid", [sym(gid()), addr(freighterPublicKey), u32v(bps)]);
+});
+document.getElementById("defaultBtn").addEventListener("click", () => {
+  const target = document.getElementById("defaultAddr").value.trim();
+  simpleAction("mark_default", [sym(gid()), addr(freighterPublicKey), addr(target)]);
+});
+
+function gid() {
+  return document.getElementById("groupId").value.trim();
+}
+
+async function simpleAction(method, args) {
+  try {
+    setStatus("actionStatus", "Submitting " + method + "…", "pending");
+    const cfg = saveConfig();
+    const result = await callContract(cfg.contractId, method, args);
+    setStatus("actionStatus", method + " succeeded. Tx: " + result.hash, "ok");
+    loadGroupState();
+  } catch (err) {
+    setStatus("actionStatus", method + " failed: " + err.message, "err");
+  }
+}
+
+document.getElementById("loadGroupBtn").addEventListener("click", loadGroupState);
+
+async function loadGroupState() {
+  try {
+    setStatus("actionStatus", "Loading group state (read-only simulation)…", "pending");
+    const cfg = saveConfig();
+    const server = getServer();
+    const contract = new StellarSdk.Contract(cfg.contractId);
+    // Read-only calls still go through simulate (no signature/submit needed)
+    // using any funded account as the simulation source.
+    const account = await server.getAccount(freighterPublicKey);
+    const tx = new StellarSdk.TransactionBuilder(account, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: getNetworkPassphrase(),
+    })
+      .addOperation(contract.call("get_group_state", sym(gid())))
+      .setTimeout(30)
+      .build();
+    const sim = await server.simulateTransaction(tx);
+    if (StellarSdk.SorobanRpc.Api.isSimulationError(sim)) {
+      throw new Error(sim.error);
+    }
+    const retval = sim.result && sim.result.retval;
+    const state = StellarSdk.scValToNative(retval);
+    renderState(state);
+    setStatus("actionStatus", "Loaded.", "ok");
+  } catch (err) {
+    setStatus("actionStatus", "Load failed: " + err.message, "err");
+  }
+}
+
+function renderState(state) {
+  document.getElementById("stateBox").style.display = "block";
+  const cfg = state.config;
+  document.getElementById("stateSummary").innerHTML = `
+    <span class="badge">${state.locked ? "Locked" : "Open for joining"}</span>
+    &nbsp; Round ${state.round} &middot; Rotation ${state.rotation} &middot;
+    Reserve: ${state.reserve} &middot; Uncovered shortfall (bad debt): ${state.total_uncovered_shortfall}
+    <br><br>
+    Contribution: ${cfg.contribution} per round &middot; Collateral: ${cfg.collateral} &middot;
+    Max bid: ${(cfg.max_bid_bps / 100).toFixed(1)}% &middot; Max members: ${cfg.max_members}
+  `;
+  const rows = state.members.map((m) => `
+    <tr>
+      <td>${m.addr.slice(0, 6)}…${m.addr.slice(-4)}</td>
+      <td>${m.active ? "active" : (m.defaulted ? "defaulted" : "inactive")}</td>
+      <td>${m.won_this_rotation ? "yes" : "no"}</td>
+      <td>${m.contributed_this_round ? "yes" : "no"}</td>
+      <td>${m.bid_bps >= 0 ? (m.bid_bps / 100).toFixed(1) + "%" : "–"}</td>
+      <td>${m.total_wins}</td>
+      <td>${m.total_received}</td>
+    </tr>`).join("");
+  document.getElementById("membersTable").innerHTML = `
+    <tr><th>Member</th><th>Status</th><th>Won rotation</th><th>Paid round</th><th>Bid</th><th>Wins</th><th>Received</th></tr>
+    ${rows}
+  `;
+}
+</script>
+</body>
+</html>
