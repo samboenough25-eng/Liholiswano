@@ -13,9 +13,8 @@ jobs:
       - name: Install the Stellar CLI
         run: cargo install --locked stellar-cli
 
-      - name: Work around a known ethnum/Rust incompatibility
-        working-directory: contract
-        run: cargo update -p ethnum --precise 1.5.3
+      - name: Use an older Rust that doesn't trip a dependency's known bug
+        uses: dtolnay/rust-toolchain@1.79.0
 
       - name: Confirm the contract's tests still pass
         working-directory: contract
