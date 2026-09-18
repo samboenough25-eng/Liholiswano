@@ -1,7 +1,5 @@
 name: Build and deploy to Stellar Testnet
 
-# Manual only — click "Run workflow" on the Actions tab when you want to
-# (re)build and (re)deploy. Nothing here runs automatically.
 on:
   workflow_dispatch: {}
 
@@ -14,6 +12,10 @@ jobs:
 
       - name: Install the Stellar CLI
         run: cargo install --locked stellar-cli
+
+      - name: Work around a known ethnum/Rust incompatibility
+        working-directory: contract
+        run: cargo update -p ethnum
 
       - name: Confirm the contract's tests still pass
         working-directory: contract
