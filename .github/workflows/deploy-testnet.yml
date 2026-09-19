@@ -1,0 +1,56 @@
+name: Build and deploy to Stellar Testnet
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Install the Stellar CLI
+        run: cargo install --locked stellar-cli
+
+      - name: Use an older Rust that doesn't trip a dependency's known bug
+        uses: dtolnay/rust-toolchain@1.79.0
+
+      - name: Confirm the contract's tests still pass
+        working-directory: contract
+        run: cargo test
+
+      - name: Build the contract to wasm
+        working-directory: contract
+        run: stellar contract build
+
+      - name: Set up the admin identity
+        run: |
+          if [ -n "${{ secrets.STELLAR_ADMIN_SECRET }}" ]; then
+            echo "Reusing the saved admin identity"
+            stellar keys add admin --secret-key "${{ secrets.STELLAR_ADMIN_SECRET }}"
+          else
+            echo "No saved admin identity yet — generating and funding a new one on Testnet"
+            stellar keys generate admin --network testnet --fund
+          fi
+
+      - name: Show the new admin identity (first run only — copy the secret key)
+        if: ${{ secrets.STELLAR_ADMIN_SECRET == '' }}
+        run: |
+          echo "Admin public key (safe to share):"
+          stellar keys public-key admin
+          echo "Admin SECRET key (copy this once now, then save it as the STELLAR_ADMIN_SECRET repo secret and never paste it anywhere else):"
+          stellar keys secret admin
+
+      - name: Deploy a Testnet token (wrapped native test XLM)
+        run: |
+          TOKEN_ID=$(stellar contract asset deploy --asset native --network testnet --source-account admin)
+          echo "Token contract ID: $TOKEN_ID"
+
+      - name: Deploy the Liholiswano contract
+        working-directory: contract
+        run: |
+          WASM_PATH=$(find target -name "liholiswano_contract.wasm" | head -n1)
+          echo "Using wasm at: $WASM_PATH"
+          CONTRACT_ID=$(stellar contract deploy --wasm "$WASM_PATH" --network testnet --source-account admin)
+          echo "Liholiswano contract ID: $CONTRACT_ID"
