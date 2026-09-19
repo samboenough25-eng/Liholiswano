@@ -1,0 +1,21 @@
+name: Contract tests
+
+on:
+  push:
+    paths:
+      - "contract/**"
+  workflow_dispatch: {}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Use an older Rust that doesn't trip a dependency's known bug
+        uses: dtolnay/rust-toolchain@1.79.0
+
+      - name: Run the contract's unit tests
+        working-directory: contract
+        run: cargo test
