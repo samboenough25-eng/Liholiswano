@@ -20,6 +20,8 @@ jobs:
 
       - name: Use an older Rust that doesn't trip a dependency's known bug
         uses: dtolnay/rust-toolchain@1.79.0
+        with:
+          targets: wasm32-unknown-unknown
 
       - name: Confirm the contract's tests still pass
         working-directory: contract
