@@ -35,7 +35,7 @@ jobs:
         run: |
           if [ -n "${{ secrets.STELLAR_ADMIN_SECRET }}" ]; then
             echo "Reusing the saved admin identity"
-            stellar keys add admin --secret-key "${{ secrets.STELLAR_ADMIN_SECRET }}"
+            echo "${{ secrets.STELLAR_ADMIN_SECRET }}" | stellar keys add admin
           else
             echo "No saved admin identity yet — generating and funding a new one on Testnet"
             stellar keys generate admin --network testnet --fund
