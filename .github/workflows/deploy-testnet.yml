@@ -6,6 +6,8 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_ADMIN_SECRET: ${{ secrets.STELLAR_ADMIN_SECRET != '' }}
     steps:
       - name: Check out the repo
         uses: actions/checkout@v4
@@ -35,7 +37,7 @@ jobs:
           fi
 
       - name: Show the new admin identity (first run only — copy the secret key)
-        if: ${{ secrets.STELLAR_ADMIN_SECRET == '' }}
+        if: ${{ env.HAS_ADMIN_SECRET == 'false' }}
         run: |
           echo "Admin public key (safe to share):"
           stellar keys public-key admin
