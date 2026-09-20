@@ -12,6 +12,9 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
+      - name: Install a system library the Stellar CLI needs
+        run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev pkg-config
+
       - name: Install the Stellar CLI
         run: cargo install --locked stellar-cli
 
