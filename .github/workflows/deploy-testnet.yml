@@ -51,7 +51,7 @@ jobs:
 
       - name: Look up the Testnet native XLM token contract
         run: |
-          TOKEN_ID=$(stellar contract id asset --asset native --network testnet --source-account admin)
+          TOKEN_ID=$(stellar contract id asset --asset native --network testnet)
           echo "Token contract ID: $TOKEN_ID"
 
       - name: Deploy the Liholiswano contract
