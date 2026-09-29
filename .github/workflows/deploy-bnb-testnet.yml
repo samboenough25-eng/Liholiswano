@@ -1,0 +1,26 @@
+name: Deploy Liholiswano to BNB Testnet
+on:
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run compile
+      - run: npm test
+      - name: Deploy
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: npm run deploy:testnet | tee deployment.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bnb-testnet-deployment
+          path: deployment.txt
+      - name: Print deployment
+        run: cat deployment.txt
