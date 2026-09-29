@@ -12,3 +12,5 @@ Serve web/ with a static server. After deploying, put the contract address and a
 The contract uses an ERC-20 allowlist so the same deployment can support USDT or USDC. Token decimals must match the selected token.
 ## Safety
 This is a testnet implementation. Complete independent smart-contract/security review and test the full money flow before using real funds.
+
+CI note: dependency installation uses npm install because this repository intentionally does not commit a lockfile yet.
