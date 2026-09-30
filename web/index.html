@@ -34,6 +34,9 @@ a{color:inherit}
 <script src="./config.js"></script>
 <script>
 (()=>{const E=window.ethers,C=window.LIHOLISWANO_CONFIG;let provider,signer,address;
+const saved=(()=>{try{return JSON.parse(localStorage.getItem("liholiswano-bnb-config")||"{}")}catch{return{}}})();
+if(saved.contractAddress)C.contractAddress=saved.contractAddress;
+if(saved.tokenAddress)C.tokenAddress=saved.tokenAddress;
 const ABI=[
 "function owner() view returns(address)","function approvedToken(address) view returns(bool)","function setApprovedToken(address,bool)",
 "function createGroup(bytes32,address,uint256,uint256,uint256,uint256)","function joinGroup(bytes32)","function lockGroup(bytes32)",
@@ -45,17 +48,18 @@ const ABI=[
 const TOKEN=["function approve(address,uint256) returns(bool)","function allowance(address,address) view returns(uint256)","function balanceOf(address) view returns(uint256)","function decimals() view returns(uint8)","function symbol() view returns(string)"];
 const $=id=>document.getElementById(id),log=(x,ok=false)=>{$("log").className="status "+(ok?"ok":"err");$("log").textContent=String(x)+"\n"+$("log").textContent};
 const need=()=>{if(!signer)throw Error("Connect your EVM wallet first.");if(!E.isAddress($("contract").value.trim()))throw Error("Set the deployed protocol contract address.");if(!E.isAddress($("token").value.trim()))throw Error("Set the deployed test token address.");};
+const ensureChain=async()=>{const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId))throw Error("Wrong network. Switch to BNB Smart Chain Testnet.");};
 const id=()=>{const s=$("groupView").value.trim()||$("gid").value.trim();if(!s)throw Error("Enter a group ID.");if(new TextEncoder().encode(s).length>31)throw Error("Group ID must be 31 bytes or fewer.");return E.encodeBytes32String(s)};
 const tokenAmount=v=>E.parseUnits(String(v),Number(C.tokenDecimals||6));
 const protocol=()=>new E.Contract($("contract").value.trim(),ABI,signer);
 const token=()=>new E.Contract($("token").value.trim(),TOKEN,signer);
 async function connect(){if(!window.ethereum)throw Error("No EVM wallet provider detected. Use Binance Web3 Wallet or MetaMask.");provider=new E.BrowserProvider(window.ethereum);signer=await provider.getSigner();address=await signer.getAddress();$("wallet").textContent="Connected: "+address;await switchNetwork(false);await refreshToken();}
 async function switchNetwork(ask=true){if(!window.ethereum)throw Error("No EVM wallet provider.");try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:"0x61"}]})}catch(e){if(e.code===4902||ask){await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:"0x61",chainName:C.chainName,nativeCurrency:{name:"tBNB",symbol:"tBNB",decimals:18},rpcUrls:[C.rpcUrl],blockExplorerUrls:[C.explorer]}]})}else throw e}}
-async function act(fn){try{const h=await fn();log(h,true);if($("groupView").value.trim())await load()}catch(e){log(e?.shortMessage||e?.reason||e?.message||String(e))}}
+async function act(fn){try{if(signer)await ensureChain();const h=await fn();log(h,true);if($("groupView").value.trim())await load()}catch(e){log(e?.shortMessage||e?.reason||e?.message||String(e))}}
 async function refreshToken(){if(!E.isAddress($("token").value.trim())||!signer)return;try{const t=token();const [b,a,s]=await Promise.all([t.balanceOf(address),t.allowance(address,$("contract").value.trim()),t.symbol()]);$("tokenState").textContent="Balance: "+E.formatUnits(b,C.tokenDecimals)+" "+s+"\nAllowance to protocol: "+E.formatUnits(a,C.tokenDecimals)+" "+s}catch(e){$("tokenState").textContent=e.message}}
 $("connect").onclick=()=>act(async()=>{await connect();return"Wallet connected"});
 $("network").onclick=()=>act(async()=>{await switchNetwork(true);return"Network switched to BNB Smart Chain Testnet"});
-$("save").onclick=async()=>{C.contractAddress=$("contract").value.trim();C.tokenAddress=$("token").value.trim();await refreshToken();log("Configuration loaded for this browser session.",true)};
+$("save").onclick=async()=>{const ca=$("contract").value.trim(),ta=$("token").value.trim();if(!E.isAddress(ca)||!E.isAddress(ta))return log("Enter valid protocol and token contract addresses.");C.contractAddress=ca;C.tokenAddress=ta;C.deploymentConfigured=true;localStorage.setItem("liholiswano-bnb-config",JSON.stringify({contractAddress:ca,tokenAddress:ta}));await refreshToken();log("Configuration saved in this browser.",true)};
 $("explorer").onclick=()=>{if(E.isAddress($("contract").value.trim()))window.open(C.explorer+"/address/"+$("contract").value.trim(),"_blank")};
 $("approveToken").onclick=()=>act(async()=>{need();const tx=await token().approve($("contract").value.trim(),E.MaxUint256);const r=await tx.wait();await refreshToken();return"Token approval confirmed: "+r.hash});
 $("adminApprove").onclick=()=>act(async()=>{need();const p=protocol();if((await p.owner()).toLowerCase()!==address.toLowerCase())throw Error("Connected wallet is not protocol owner.");const tx=await p.setApprovedToken($("token").value.trim(),true);const r=await tx.wait();return"Token allowlist approval confirmed: "+r.hash});
@@ -72,5 +76,6 @@ $("load").onclick=()=>act(async()=>{need();$("groupView").value=$("groupView").v
 function render(g,ms){const html="<div class='stats'><div class='stat'><b>"+g[8]+"</b><span>Round</span></div><div class='stat'><b>"+g[9]+"</b><span>Rotation</span></div><div class='stat'><b>"+ms.filter(m=>m.active).length+"/"+g[6]+"</b><span>Active members</span></div><div class='stat'><b>"+E.formatUnits(awaitable(g[10]),C.tokenDecimals)+"</b><span>Reserve</span></div><div class='stat'><b>"+E.formatUnits(awaitable(g[11]),C.tokenDecimals)+"</b><span>Shortfall</span></div></div><p class='small'>Locked: "+g[1]+" · Token: <span class='mono'>"+g[3]+"</span> · Contribution: "+E.formatUnits(g[4],C.tokenDecimals)+" · Collateral: "+E.formatUnits(g[5],C.tokenDecimals)+" · Max bid: "+(Number(g[7])/100)+"%</p><div class='scroll'><table><tr><th>Member</th><th>Status</th><th>Won</th><th>Bid</th><th>Contributed</th><th>Wins</th><th>Received</th></tr>"+ms.map(m=>"<tr><td class='mono'>"+m.account+"</td><td>"+(m.active?(m.defaulted?"Defaulted":"Active"):"Inactive")+"</td><td>"+m.wonThisRotation+"</td><td>"+(m.bidBps<0n?"—":Number(m.bidBps)/100+"%")+"</td><td>"+m.contributedThisRound+"</td><td>"+m.totalWins+"</td><td>"+E.formatUnits(m.totalReceived,C.tokenDecimals)+"</td></tr>").join("")+"</table></div>";$("state").innerHTML=html}
 function awaitable(x){return x}
 if(C.contractAddress)$("contract").value=C.contractAddress;if(C.tokenAddress)$("token").value=C.tokenAddress;
+$("wallet").textContent=C.deploymentConfigured?"Deployment configured for BNB Testnet. Connect wallet to continue.":"Deployment not configured. Add the Testnet contract addresses after deployment.";
 })();
 </script></body></html>
