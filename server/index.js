@@ -130,4 +130,17 @@ app.get("/api/support/tickets",auth,async(req,res)=>{const q=await db().query("s
 app.post("/api/groups",auth,async(req,res)=>{if(req.user.kyc_status!=="approved")return res.status(403).json({error:"KYC approval is required"});const name=String(req.body.name||"").trim(),onchain=String(req.body.onchainGroupId||"").trim(),country=String(req.body.country||req.user.country);if(name.length<2||name.length>120||!onchain||onchain.length>66||!["BW","SZ"].includes(country))return res.status(400).json({error:"Invalid group data"});try{const q=await db().query("insert into groups(onchain_group_id,name,country,contract_address,metadata,created_by) values($1,$2,$3,$4,$5,$6) returning *",[onchain,name,country,req.body.contractAddress||null,JSON.stringify(req.body.metadata||{}),req.user.id]);await audit(req.user.id,"group.created","group",q.rows[0].id);res.status(201).json({group:q.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Group already recorded"});res.status(400).json({error:"Unable to create group"})}});
 
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
-app.listen(port,()=>console.log("Liholiswano API listening on port "+port));
+async function start(){
+  if(pool){
+    try{
+      const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
+      await pool.query(schema);
+      console.log("Database schema ready");
+    }catch(e){
+      console.error("Database initialization failed:",e.message);
+      process.exit(1);
+    }
+  }
+  app.listen(port,()=>console.log("Liholiswano API listening on port "+port));
+}
+start();
