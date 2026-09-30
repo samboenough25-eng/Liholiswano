@@ -27,7 +27,7 @@ async function main() {
   const approveTx = await protocol.setApprovedToken(mock.target, true);
   await approveTx.wait();
 
-  const approved = await protocol.approvedTokens(mock.target);
+  const approved = await protocol.approvedToken(mock.target);
   if (!approved) {
     throw new Error("MockUSDT was not approved by the protocol");
   }
