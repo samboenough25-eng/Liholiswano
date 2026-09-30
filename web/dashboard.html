@@ -7,7 +7,7 @@
 <section class="card"><h2>Savings groups</h2><button id="groups">Refresh groups</button><div id="groupsOut" class="status">—</div></section>
 <section class="card"><h2>Transactions & activity</h2><button id="activity">Refresh activity</button><div id="activityOut" class="status">—</div></section>
 <section class="card"><h2>Support</h2><input id="subject" placeholder="Subject"><br><br><input id="description" placeholder="How can we help?"><p><button id="ticket">Create ticket</button></p></section>
-<script>
+<script>window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
 const API=(window.LIHOLISWANO_API||location.origin), $=x=>document.getElementById(x);let token=localStorage.getItem("lhs_token")||"";
 async function api(path,opt={}){opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
 async function refresh(){if(!token)return;try{const [p,k,w,g,t,l,n]=await Promise.all([api("/api/profile"),api("/api/kyc"),api("/api/wallets"),api("/api/groups"),api("/api/transactions"),api("/api/ledger"),api("/api/notifications")]);$("profile").textContent=JSON.stringify(p.profile,null,2);$("kyc").textContent=JSON.stringify(k,null,2);$("wallets").textContent=JSON.stringify(w.wallets,null,2);$("groupsOut").textContent=JSON.stringify(g.groups,null,2);$("activityOut").textContent=JSON.stringify({transactions:t.transactions,ledger:l.entries,notifications:n.notifications},null,2);$("status").textContent="Signed in."; }catch(e){$("status").textContent=e.message}}
