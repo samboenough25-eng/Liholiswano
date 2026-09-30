@@ -93,5 +93,11 @@ app.get("/api/me/eligibility",auth,async(req,res)=>{
   res.json({kycStatus:req.user.kyc_status,restrictedFinancialOperations:restricted,reason:restricted?null:"KYC approval is required for restricted financial operations"});
 });
 
+
+
+app.get("/api/groups",auth,async(req,res)=>{const q=await db().query("select g.id,g.chain_id,g.contract_address,g.onchain_group_id,g.name,g.country,g.status,g.metadata,g.created_at,count(m.id)::int member_count from groups g left join group_memberships m on m.group_id=g.id and m.status in ('active','pending') where g.status<>'suspended' group by g.id order by g.created_at desc");res.json({groups:q.rows})});
+app.get("/api/groups/:id",auth,async(req,res)=>{const q=await db().query("select g.*,(select count(*) from group_memberships m where m.group_id=g.id)::int member_count from groups g where g.id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"Group not found"});const m=await db().query("select user_id,wallet_address,status,joined_at,left_at from group_memberships where group_id=$1 order by joined_at",[req.params.id]);res.json({group:q.rows[0],members:m.rows})});
+app.post("/api/groups/:id/join",auth,async(req,res)=>{try{if(req.user.kyc_status!=="approved")return res.status(403).json({error:"KYC approval is required"});const a=String(req.body.walletAddress||"");if(!/^0x[a-fA-F0-9]{40}$/.test(a))return res.status(400).json({error:"Invalid wallet address"});const q=await db().query("insert into group_memberships(group_id,user_id,wallet_address) values($1,$2,$3) returning *",[req.params.id,req.user.id,a.toLowerCase()]);await audit(req.user.id,"group.joined","group",req.params.id);res.status(201).json({membership:q.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Already a member or wallet already used"});res.status(400).json({error:"Unable to join group"})}});
+
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
 app.listen(port,()=>console.log("Liholiswano API listening on port "+port));
