@@ -23,8 +23,6 @@ async function main() {
 
   await (await app.connect(a).createGroup(id, token.target, contribution, collateral, 2000, 3)).wait();
   for (const m of members) await (await app.connect(m).joinGroup(id)).wait();
-  await (await app.connect(a).lockGroup(id)).wait();
-
   for (const m of members) await (await app.connect(m).contribute(id)).wait();
   await (await app.connect(a).submitBid(id, 500)).wait();
   await (await app.connect(b).submitBid(id, 1500)).wait();
