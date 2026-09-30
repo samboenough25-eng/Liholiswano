@@ -1,3 +1,20 @@
+# ACTIVE IMPLEMENTATION: BNB Smart Chain
+
+The active product branch is `bnb-app-complete`. The BNB Solidity contract is the financial authority for membership, collateral, contributions, bidding, deadlines, defaults, settlement and rotation. The browser is only a client and does not hold treasury keys.
+
+**Important:** the Stellar/Soroban material below is legacy historical material. It is not the active BNB deployment and must not be used as evidence that the current BNB app is deployed on Stellar.
+
+## BNB validation gates
+
+- `npm run compile`
+- `npm test`
+- `npm run e2e:local`
+- `npm run validate:web`
+
+The BNB contract is still unaudited. Testnet deployment requires a dedicated BNB Testnet wallet and tBNB. Mainnet/real-money use requires independent security review, economic testing, monitoring, and applicable legal/compliance work.
+
+---
+
 # Liholiswano Financial Services Platform
 
 Liholiswano is a community rotating-savings platform. The current target architecture uses the Stellar/Soroban contract as the financial authority while the web application provides the user interface.
