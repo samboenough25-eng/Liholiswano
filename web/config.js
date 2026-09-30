@@ -6,5 +6,7 @@ window.LIHOLISWANO_CONFIG={
   contractAddress:"",
   tokenAddress:"",
   tokenSymbol:"mUSDT",
-  tokenDecimals:6
+  tokenDecimals:6,
+  environment:"testnet",
+  deploymentConfigured:false
 };
