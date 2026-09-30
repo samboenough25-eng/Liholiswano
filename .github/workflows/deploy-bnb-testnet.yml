@@ -15,6 +15,11 @@ jobs:
       - run: npm install
       - run: npm run compile
       - run: npm test
+      - name: Validate deployment secret
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then echo "Missing DEPLOYER_PRIVATE_KEY repository secret"; exit 1; fi
       - name: Deploy protocol and test token
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
