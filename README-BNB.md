@@ -10,6 +10,13 @@ This branch contains the BNB Smart Chain implementation of Liholiswano.
 - EVM wallet compatibility, including wallets exposing an EIP-1193 provider.
 
 ## Stage 2 — BNB Testnet deployment
+
+### Current status
+The code-side Stage 2 implementation is complete. Actual Testnet deployment remains wallet-dependent: a dedicated Testnet deployer must be funded with tBNB and supplied through the `DEPLOYER_PRIVATE_KEY` GitHub Actions secret. No production wallet should be used for this step.
+
+The browser frontend also persists Testnet contract addresses locally and blocks contract actions when the connected wallet is on the wrong network.
+
+See `PAGES-SETUP.md` for GitHub Pages configuration.
 The deployment workflow deploys two contracts to BNB Smart Chain Testnet:
 1. Liholiswano protocol.
 2. MockUSDT test token with 6 decimals and an initial test supply for the deployer.
