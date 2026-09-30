@@ -1,62 +1,43 @@
-# ACTIVE IMPLEMENTATION: BNB Smart Chain
+# Liholiswano Financial Services Platform
 
-The active product branch is `bnb-app-complete`. The BNB Solidity contract is the financial authority for membership, collateral, contributions, bidding, deadlines, defaults, settlement and rotation. The browser is only a client and does not hold treasury keys.
+## Active implementation
 
-**Important:** the Stellar/Soroban material below is legacy historical material. It is not the active BNB deployment and must not be used as evidence that the current BNB app is deployed on Stellar.
+The active product branch is `bnb-app-complete` and targets BNB Smart Chain. The Solidity contract is the financial authority for group membership, collateral, contributions, bids, deadlines, defaults, settlement and rotation. The browser is a client and does not hold treasury keys.
 
-## BNB validation gates
+## Current validation
 
 - `npm run compile`
 - `npm test`
 - `npm run e2e:local`
 - `npm run validate:web`
 
-The BNB contract is still unaudited. Testnet deployment requires a dedicated BNB Testnet wallet and tBNB. Mainnet/real-money use requires independent security review, economic testing, monitoring, and applicable legal/compliance work.
+These checks are enforced by the BNB GitHub Actions workflow.
 
----
+## Testnet
 
-# Liholiswano Financial Services Platform
+Actual BNB Testnet deployment requires a dedicated deployer wallet funded with tBNB. The private key belongs only in the GitHub Actions secret `DEPLOYER_PRIVATE_KEY`. Never use a production wallet or share a seed phrase.
 
-Liholiswano is a community rotating-savings platform. The current target architecture uses the Stellar/Soroban contract as the financial authority while the web application provides the user interface.
+The Testnet deployment creates the Liholiswano protocol and an unrestricted MockUSDT test token. MockUSDT is Testnet-only and must never be used on Mainnet.
 
-## Current live Testnet integration
+## Security status
 
-The V2.2 Soroban contract has already been deployed and exercised on Stellar Testnet in the companion protocol repository:
+The current contract has been hardened with:
 
-- Contract: `CAGSH4W3EYKOBHV6TUZ2WMKHKMZP6NNID5PLERFEV2EG6TRZWBZRKLY`
-- Test settlement token: `CAC2XTKZ527GSTTCVJWZNBDJLEDLNFCASGZ2CNQH6V3UCZYAGE5QASOU`
-- Network: Stellar Testnet
+- automatic full-group locking
+- contract-enforced round deadlines
+- permissionless deadline default/settlement triggering
+- per-group escrow accounting
+- reentrancy protection
+- exact standard-token transfer checks
+- two-step protocol ownership transfer
+- regression tests for deadline, default, accounting and reentrancy behaviour
 
-The `web/index.html` application is configured for this deployed contract and uses Freighter for member authorization.
+The contract is still unaudited. CI success is not a security audit and is not approval for Mainnet or real-money operation.
 
-## Platform deployment
+## Legacy material
 
-The repository now contains `.github/workflows/pages.yml`, which publishes `web/` as a GitHub Pages site whenever changes reach `main`.
+Older Stellar/Soroban source and documentation remain in this repository for historical reference. They are not the active BNB implementation. The obsolete Stellar GitHub workflows have been removed from this branch.
 
-The browser application supports the current V2.2 interface:
+## Product-level work still required
 
-- Freighter connection
-- group creation
-- group locking
-- joining
-- waitlist
-- waitlist promotion
-- contributions
-- compulsory bids
-- round settlement
-- admin default action
-- completion refund
-- group state and member dashboard
-- approved-token inspection and protocol-admin token approval
-
-## Security boundary
-
-The website does not hold a Liholiswano treasury key. Member wallets authorize their own transactions and the Soroban contract enforces the financial rules.
-
-The current browser screen uses one connected wallet for its administrative workflow, so it exposes threshold-1 group creation/locking/default actions. The underlying contract supports N-of-M multi-admin authorization, but a production interface needs independent wallet signatures rather than collecting other members' secret keys.
-
-## Testnet only
-
-This deployment is for technical testing and demonstration. It is not a production financial service.
-
-Before Mainnet or real-money use, the project still needs wallet UX hardening, production indexing/read services, notifications, fiat/mobile-money rails, security review, operational monitoring, jurisdiction-specific legal/compliance work in Botswana and Eswatini, and controlled pilot validation. Testnet token addresses must never be assumed to be Mainnet addresses.
+The active BNB repository is currently an on-chain/Testnet application foundation, not the entire regulated financial-service stack. Account management, KYC/AML provider integration, notifications, production backend/indexing, monitoring, reconciliation, customer support controls, and Botswana/Eswatini legal/compliance work still require separate implementation and verification.
