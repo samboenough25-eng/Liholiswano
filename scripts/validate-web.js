@@ -7,4 +7,6 @@ if(!scripts.length)throw new Error("No inline scripts found in web/index.html");
 for(let i=0;i<scripts.length;i++)new vm.Script(scripts[i],{filename:"web/index.html#script"+(i+1)});
 if(!html.includes('src="./config.js"'))throw new Error("web/config.js is not loaded");
 if(!html.includes("ethers.umd.min.js"))throw new Error("ethers v6 browser bundle is not loaded");
+const requiredIds=["connect","network","refreshWallet","wallet","contract","token","save","verify","deploymentState","approveToken","adminApprove","gid","create","lock","groupView","load","groups","join","approveContribution","contribute","bid","submit","settle","defaultMember","markDefault","log"];
+for(const id of requiredIds)if(!html.includes(`id="${id}"`))throw new Error(`Missing required UI element: ${id}`);
 console.log("WEB_STATIC_VALIDATION=PASS");
