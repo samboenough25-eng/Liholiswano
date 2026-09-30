@@ -1,0 +1,10 @@
+const fs=require("fs"),vm=require("vm");
+const config=fs.readFileSync("web/config.js","utf8");
+const html=fs.readFileSync("web/index.html","utf8");
+new vm.Script(config,{filename:"web/config.js"});
+const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(s=>s.trim());
+if(!scripts.length)throw new Error("No inline scripts found in web/index.html");
+for(let i=0;i<scripts.length;i++)new vm.Script(scripts[i],{filename:"web/index.html#script"+(i+1)});
+if(!html.includes('src="./config.js"'))throw new Error("web/config.js is not loaded");
+if(!html.includes("ethers.umd.min.js"))throw new Error("ethers v6 browser bundle is not loaded");
+console.log("WEB_STATIC_VALIDATION=PASS");
