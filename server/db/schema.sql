@@ -145,6 +145,13 @@ create table if not exists audit_log (
   metadata jsonb not null default '{}'::jsonb, created_at timestamptz not null default now()
 );
 
+-- Backward-compatible audit log migration for older databases.
+alter table audit_log add column if not exists actor_user_id uuid references users(id);
+alter table audit_log add column if not exists entity_type varchar(64);
+alter table audit_log add column if not exists entity_id uuid;
+alter table audit_log add column if not exists metadata jsonb not null default '{}'::jsonb;
+alter table audit_log add column if not exists created_at timestamptz not null default now();
+
 create index if not exists idx_kyc_cases_user on kyc_cases(user_id);
 create index if not exists idx_screenings_user on compliance_screenings(user_id);
 create index if not exists idx_wallets_user on wallets(user_id);
