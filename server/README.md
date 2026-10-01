@@ -1,48 +1,54 @@
-# Liholiswano API — Track A
+# Liholiswano API
 
-This directory is the first backend foundation for the BNB implementation.
+The `server/` directory contains the Node.js API and operational services for the active BNB Smart Chain implementation.
 
 ## Responsibilities
 
-- Customer account registration and login.
-- Password hashing with bcrypt.
-- Short-lived JWT authentication.
-- Country-aware customer records for Botswana (BW) and Eswatini (SZ).
-- KYC status and eligibility gating.
+- Customer account registration and authentication.
+- Password hashing and short-lived JWT authentication.
+- Botswana (BW) and Eswatini (SZ) customer records.
+- KYC/compliance state and eligibility gating.
 - PostgreSQL persistence.
-- Blockchain transaction tracking schema.
-- Group metadata and membership schema.
-- Audit records for security-sensitive application events.
-- Health endpoint for Render monitoring.
+- Transaction preparation and idempotency.
+- Blockchain event indexing and reconciliation foundations.
+- WhatsApp webhook/router foundation.
+- Group metadata and membership records.
+- Audit records and support controls.
+- Health and operational status endpoints.
 
-## Important architecture rule
+## Architecture rule
 
-The API is not the financial authority. The BNB smart contract remains authoritative for membership lifecycle, contributions, bids, defaults, settlement, payouts and on-chain balances.
+The API is **not** the financial authority. The BNB smart contract remains authoritative for membership lifecycle, contributions, bids, defaults, settlement, payouts and on-chain financial state.
 
-The API stores application identity, compliance state, metadata, transaction references and audit information. It must never silently change an on-chain financial result.
+The API may prepare and reconcile transactions, but it must never silently replace or override an on-chain financial result.
 
-## Environment
+## Required production configuration
 
-Copy .env.example to .env locally. Never commit .env.
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `CORS_ORIGIN`
+- `BSC_CHAIN_ID=97` for the current Testnet environment
+- `BSC_TESTNET_RPC_URL`
+- `BNB_CONTRACT_ADDRESS`
 
-Required production variables:
+Additional integrations are required before customer financial transactions can be enabled:
 
-- DATABASE_URL
-- JWT_SECRET
-- CORS_ORIGIN
+- managed wallet provider
+- WhatsApp Business Platform
+- KYC provider
+- AML/sanctions/PEP/compliance provider
+- monitoring and alerting
 
-Optional:
+## Wallet security
 
-- PORT
-- DATABASE_SSL
-- JWT_EXPIRES_IN
+A wallet address supplied by a customer is not proof of control of that wallet. Financial transaction preparation must only use a wallet that has been verified by the intended wallet/provider verification mechanism.
+
+Never store customer private keys in this API.
 
 ## Database
 
-Apply server/db/schema.sql to the PostgreSQL database before using authenticated routes.
-
-For Render, use the database's internal connection string where the API and database are in the same Render region.
+The API initializes the modular SQL files in `server/db/` when `DATABASE_URL` is configured. Schema changes should remain idempotent and should eventually move to an explicit versioned migration system.
 
 ## Current scope
 
-This is a foundation, not a completed production financial backend. Provider integrations (KYC/AML, email/SMS), admin workflows, reconciliation/indexing, recovery controls and operational monitoring are next.
+This is an active Testnet foundation, not a completed production financial backend. Provider integrations, managed-wallet signing, live reconciliation, keeper hardening, monitoring, recovery controls, and operational/compliance workflows remain required before real-money operation.
