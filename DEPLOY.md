@@ -1,94 +1,131 @@
-# Deploying the Liholiswano contract to Stellar Testnet
+# Liholiswano BNB Smart Chain deployment
 
-None of these steps have been run by me (no network access to Stellar from
-this environment, no wasm32 target available — see PILOT_SCOPE.md). This is
-a standard Soroban deployment sequence; follow the official docs at
-https://developers.stellar.org/docs if anything here looks stale.
+This is the active deployment guide for the bnb-app-complete branch.
 
-## 1. Install the toolchain (on your own machine)
+## Network
 
-```bash
-# Rust, if you don't already have it
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-rustup target add wasm32-unknown-unknown
+Current target:
+- BNB Smart Chain Testnet
+- Chain ID 97
+- Native gas token: tBNB
 
-# Soroban CLI
-cargo install --locked soroban-cli
-```
+## 1. Dedicated deployment wallet
 
-## 2. Build the contract
+Create a dedicated BNB Testnet deployment wallet and fund it with tBNB.
 
-```bash
-cd contract
-cargo test          # confirm all 10 tests still pass on your machine
-soroban contract build
-# produces target/wasm32-unknown-unknown/release/liholiswano_contract.wasm
-```
+Do not use a production wallet. Never commit or share the private key.
 
-## 3. Fund a Testnet identity
+For GitHub Actions, store the deployment key only as the repository secret DEPLOYER_PRIVATE_KEY.
+
+## 2. Local validation
+
+Run:
 
 ```bash
-soroban keys generate admin --network testnet
-soroban keys fund admin --network testnet
+npm install
+npm run compile
+npm test
+npm run e2e:local
+npm run validate:web
+npm run api:check
 ```
 
-## 4. Get or create a Testnet token
+All checks should pass before deployment.
 
-For a pilot, the simplest option is Stellar's native asset wrapped as a
-Stellar Asset Contract (SAC) — this gives you a real Soroban token interface
-backed by testnet XLM:
+## 3. Testnet deployment
+
+Use .github/workflows/deploy-bnb-testnet.yml.
+
+The workflow deploys:
+1. Liholiswano
+2. MockUSDT
+3. MockUSDT approval in Liholiswano
+
+The workflow records the public deployment addresses as an artifact.
+
+## 4. Verify the deployment
+
+Confirm:
+- chain ID is 97
+- Liholiswano contains contract code
+- MockUSDT contains contract code
+- MockUSDT is approved
+- the intended deployer is the contract owner
+- only Testnet assets are being used
+
+MockUSDT is a development token. It is not USDT or USDC and must never be treated as a production stablecoin.
+
+## 5. Configure the API
+
+Set:
+
+```text
+BSC_CHAIN_ID=97
+BSC_TESTNET_RPC_URL=<verified BNB Testnet RPC>
+BNB_CONTRACT_ADDRESS=<verified Liholiswano address>
+```
+
+For the indexer:
+
+```text
+INDEXER_CONFIRMATIONS=3
+INDEXER_MAX_BLOCK_RANGE=1000
+INDEXER_INITIAL_LOOKBACK=5000
+INDEXER_START_BLOCK=<deployment block>
+```
+
+Using the deployment block is preferred.
+
+## 6. Configure PostgreSQL
+
+Set DATABASE_URL.
+
+Before indexing, verify that the database contains:
+- indexer_state
+- chain_events
+- reconciliation_runs
+- transaction_requests
+
+## 7. Run the indexer
+
+Run:
 
 ```bash
-soroban contract asset deploy \
-  --asset native \
-  --network testnet \
-  --source admin
+npm run indexer:check
 ```
 
-This prints a token contract ID — save it, you'll need it both for
-deployment and for the frontend config.
+The indexer validates the BSC chain, contract bytecode, cursor state and block hash. It records contract events and uses a PostgreSQL advisory lock to prevent concurrent indexers.
 
-If you'd rather use a custom pilot token (so contribution amounts aren't
-tied to XLM's price), issue your own Stellar classic asset first via the
-Stellar CLI or Laboratory, then wrap that asset the same way with
-`soroban contract asset deploy --asset <CODE>:<ISSUER>`.
+## 8. Test the complete Testnet lifecycle
 
-## 5. Deploy the contract
+Test:
 
-```bash
-soroban contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/liholiswano_contract.wasm \
-  --network testnet \
-  --source admin
-```
+1. Create a group.
+2. Join with at least three test wallets.
+3. Verify collateral.
+4. Lock the group.
+5. Contribute.
+6. Submit bids.
+7. Settle.
+8. Verify payout and fee.
+9. Verify rotation.
+10. Test deadline/default behaviour.
+11. Verify blockchain events in PostgreSQL.
+12. Restart the indexer and verify resume/idempotency.
+13. Compare indexed data with on-chain state.
 
-This prints the deployed contract's ID (starts with `C...`). That's what
-goes in the frontend's "Contract ID" field.
+## Security boundary
 
-## 6. Configure the frontend
+The BNB contract remains authoritative for financial state.
 
-Open `web/pilot-onchain.html`, connect Freighter (set to Testnet in the
-extension), and fill in:
-- **Contract ID** — from step 5
-- **Token contract ID** — from step 4
-- **RPC URL** — `https://soroban-testnet.stellar.org` (default)
-- **Network passphrase** — `Test SDF Network ; September 2015` (default)
+The backend must not manually override on-chain financial outcomes.
 
-## 7. Walk through one full cycle before inviting anyone
+Customer private keys must never be stored in the API.
 
-1. Admin: **Create group**.
-2. 3+ members (each with Freighter connected to their own funded testnet
-   account): **Join group**. Confirm collateral actually leaves their
-   balance and lands in the contract (check on
-   https://stellar.expert/explorer/testnet).
-3. Admin: **Lock group**.
-4. Every member: **Contribute this round**, then **Submit bid**.
-5. Anyone: **Settle round** — confirm the winner's balance increases by
-   the expected net amount, and bonus shares land correctly on the others.
-6. Deliberately let one member miss a round, then admin: **Mark default**
-   — confirm collateral is seized and, if applicable, an uncovered
-   shortfall shows up in the group state.
+A wallet address alone does not prove wallet ownership. Financial signing must use the intended managed-wallet/provider verification mechanism.
 
-Only after all of that behaves as expected on Testnet would this be
-reasonable to discuss moving toward Mainnet — and that jump deserves its
-own separate security review, not just "it worked in the pilot."
+## Testnet warning
+
+This guide is for Testnet only. Testnet success is not a security audit, regulatory approval, custody approval, or authorization to operate a real-money financial service.
+
+Mainnet requires separately verified production token addresses, wallet/custody controls, monitoring, security review, legal/compliance preparation, and controlled pilot validation.
