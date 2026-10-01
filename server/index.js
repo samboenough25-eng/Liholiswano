@@ -1,4 +1,6 @@
 require("dotenv").config();
+const fs=require("fs");
+const path=require("path");
 const express=require("express");
 const helmet=require("helmet");
 const cors=require("cors");
@@ -25,6 +27,7 @@ app.use(express.json({limit:"100kb"}));
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
+const requireRole=roles=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({error:"Insufficient permissions"});
 function sign(user){if(!jwtSecret) throw new Error("JWT_SECRET is not configured.");return jwt.sign({sub:user.id,email:user.email,role:user.role},jwtSecret,{expiresIn:process.env.JWT_EXPIRES_IN||"2h",issuer:"liholiswano"});}
 async function auth(req,res,next){
   try{
