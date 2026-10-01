@@ -25,7 +25,7 @@ const pool=process.env.DATABASE_URL?new Pool({
 app.set("trust proxy",1);
 app.use(helmet());
 app.use(cors({origin:process.env.CORS_ORIGIN?process.env.CORS_ORIGIN.split(",").map(s=>s.trim()):true,credentials:false}));
-app.use(express.json({limit:"100kb"}));
+app.use(express.json({limit:"100kb",verify:(req,res,buf)=>{if(req.path==="/api/whatsapp/webhook")req.rawBody=Buffer.from(buf);}}));
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
