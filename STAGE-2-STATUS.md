@@ -2,29 +2,46 @@
 
 ## Completed in code
 
-- BNB Solidity protocol contract
+- Solidity ROSCA protocol contract
 - automatic full-group locking
 - contract-enforced round deadlines
-- permissionless deadline defaults and settlement triggering
+- permissionless deadline/default/settlement triggering
 - per-group escrow accounting
 - reentrancy protection
-- exact ERC-20 transfer checks
+- exact standard-token transfer checks
 - two-step ownership transfer
 - Hardhat unit tests
 - local three-wallet E2E
 - browser static validation
-- manual BNB Testnet deployment workflow
+- BNB Testnet deployment workflow
+- PostgreSQL-backed blockchain event indexer
+- persistent indexer cursor and block-hash validation
+- idempotent event ingestion
+- advisory-lock protection against concurrent indexers
+- BNB network and deployed-code validation
+- BNB API foundation
+- transaction-request idempotency foundation
+- WhatsApp customer-channel foundation
 
-## Still wallet-dependent
+## Current live blockers
 
-1. Create/use a dedicated BNB Testnet deployer wallet.
-2. Fund it with tBNB.
-3. Add its private key as the GitHub Actions secret DEPLOYER_PRIVATE_KEY.
-4. Run Deploy Liholiswano to BNB Testnet.
-5. Verify the resulting public contract addresses.
-6. Configure the frontend.
-7. Perform the real three-wallet Testnet lifecycle.
+The complete BNB Testnet financial cycle has not yet been live-verified.
+
+Required next steps:
+
+1. Deploy Liholiswano to BNB Testnet.
+2. Verify the public contract address and deployment block.
+3. Configure the Render API with DATABASE_URL, JWT_SECRET and BNB contract configuration.
+4. Configure the indexer.
+5. Run the indexer against the deployed contract.
+6. Verify blockchain events in PostgreSQL.
+7. Configure the intended managed-wallet provider.
+8. Execute a real three-wallet Testnet ROSCA lifecycle.
+9. Reconcile on-chain events against database transaction records.
+10. Harden keeper automation and operational monitoring.
 
 ## Security
 
-The active BNB contract is still unaudited. No automated-test result should be interpreted as approval for Mainnet or real-money use.
+The active BNB contract remains unaudited. Automated tests are evidence of tested behaviour, not a security audit or approval for Mainnet or real-money operation.
+
+Testnet MockUSDT is a development token only.
