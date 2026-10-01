@@ -13,7 +13,8 @@
     "validate:web": "node scripts/validate-web.js",
     "api:start": "node server/index.js",
     "api:check": "node --check server/index.js",
-    "indexer:check": "node server/indexer.js"
+    "indexer:check": "node server/indexer.js",
+    "api:smoke": "node scripts/api-smoke.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
