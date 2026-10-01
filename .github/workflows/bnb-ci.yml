@@ -12,6 +12,7 @@ jobs:
         with:
           node-version: 20
       - run: npm install
+      - run: npm run check:js
       - run: npm run api:check
       - run: npm run compile
       - run: npm test
