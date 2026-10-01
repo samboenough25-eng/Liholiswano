@@ -42,7 +42,7 @@ async function sendText({to,text}){
   if(!process.env.WHATSAPP_API_URL || !process.env.WHATSAPP_ACCESS_TOKEN) return {status:"not_configured",to,text};
   const response=await fetch(process.env.WHATSAPP_API_URL,{
     method:"POST",
-    headers:{"content-type":"application/json","authorization:"Bearer "+process.env.WHATSAPP_ACCESS_TOKEN},
+    headers:{"content-type":"application/json","authorization":"Bearer "+process.env.WHATSAPP_ACCESS_TOKEN},
     body:JSON.stringify({messaging_product:"whatsapp",to,type:"text",text:{body:text}})
   });
   const body=await response.text();
