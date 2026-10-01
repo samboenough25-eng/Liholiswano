@@ -1,0 +1,56 @@
+name: Deploy Liholiswano to BNB Testnet
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: bnb-app-complete
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm install
+      - run: npm run compile
+      - run: npm test
+      - run: npm run e2e:local
+      - run: npm run validate:web
+
+      - name: Validate deployment secret
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
+            echo "Missing DEPLOYER_PRIVATE_KEY repository secret"
+            exit 1
+          fi
+
+      - name: Deploy protocol and test token
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: npm run deploy:testnet | tee deployment.txt
+
+      - name: Validate deployment output
+        run: |
+          grep -q '^LIHOLISWANO_CONTRACT=0x' deployment.txt
+          grep -q '^TEST_TOKEN_CONTRACT=0x' deployment.txt
+          grep -q '^CHAIN_ID=97$' deployment.txt
+          grep -q '^TOKEN_APPROVED=true$' deployment.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bnb-testnet-deployment
+          path: deployment.txt
+          retention-days: 30
+
+      - name: Print deployment
+        run: cat deployment.txt
