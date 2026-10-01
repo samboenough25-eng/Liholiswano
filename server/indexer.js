@@ -14,7 +14,7 @@ if(!Number.isInteger(MAX_RANGE)||MAX_RANGE<1) throw new Error("INDEXER_MAX_BLOCK
 if(START_BLOCK!==null&&(!Number.isSafeInteger(START_BLOCK)||START_BLOCK<0)) throw new Error("INDEXER_START_BLOCK must be a non-negative integer");
 
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="false"?false:{rejectUnauthorized:false}});
-const rpc=new JsonRpcProvider(RPC());
+const rpc=new JsonRpcProvider(RPC);
 const iface=new Interface(PROTOCOL_ABI);
 
 function jsonSafe(value){
