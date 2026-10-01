@@ -69,32 +69,6 @@ create table if not exists compliance_screenings (
   created_at timestamptz not null default now()
 );
 
--- Compatibility migration for databases created by the older Liholiswano schema.
--- The current application uses UUID group IDs. If an older groups table uses a
--- different ID type, keep it intact under a legacy name and create the new table.
-do $
-declare
-  existing_type text;
-begin
-  select data_type
-    into existing_type
-    from information_schema.columns
-   where table_schema='public'
-     and table_name='groups'
-     and column_name='id';
-
-  if existing_type is not null and existing_type <> 'uuid' then
-    if not exists (
-      select 1 from information_schema.tables
-       where table_schema='public' and table_name='groups_legacy'
-    ) then
-      execute 'alter table groups rename to groups_legacy';
-    else
-      raise exception 'Both incompatible groups and groups_legacy tables exist; manual migration required';
-    end if;
-  end if;
-end $;
-
 create table if not exists groups (
   id uuid primary key default gen_random_uuid(),
   chain_id bigint not null default 97,
