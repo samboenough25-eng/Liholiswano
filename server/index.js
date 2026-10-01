@@ -2,6 +2,7 @@ require("dotenv").config();
 const fs=require("fs");
 const path=require("path");
 const express=require("express");
+const {spawn}=require("child_process");
 const helmet=require("helmet");
 const cors=require("cors");
 const rateLimit=require("express-rate-limit");
@@ -180,6 +181,19 @@ app.get("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(r
 app.post("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(req,res)=>{const uid=String(req.body.userId||""),type=String(req.body.screeningType||""),status=String(req.body.status||"pending");if(!uid||!["sanctions","pep","adverse_media","risk"].includes(type)||!["pending","clear","match","review","error"].includes(status))return res.status(400).json({error:"Invalid screening"});const q=await db().query("insert into compliance_screenings(user_id,provider,screening_type,status,provider_reference,result_json) values($1,$2,$3,$4,$5,$6) returning *",[uid,String(req.body.provider||process.env.COMPLIANCE_PROVIDER||"manual"),type,status,req.body.providerReference||null,JSON.stringify(req.body.result||{})]);await audit(req.user.id,"compliance.screening_created","screening",q.rows[0].id,{type,status});res.status(201).json({screening:q.rows[0]})});
 
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
+function startBackgroundWorker(name,script,intervalMs){
+  let running=false;
+  const run=()=>{
+    if(running)return;
+    running=true;
+    const child=spawn(process.execPath,[path.join(__dirname,script)],{env:process.env,stdio:["ignore","inherit","inherit"]});
+    child.on("exit",(code,signal)=>{running=false;console.log(JSON.stringify({service:name,status:"finished",code,signal}));});
+    child.on("error",(error)=>{running=false;console.error(JSON.stringify({service:name,status:"spawn_failed",error:error.message}));});
+  };
+  console.log(JSON.stringify({service:name,status:"background_worker_enabled",intervalMs}));
+  setTimeout(run,10000);
+  setInterval(run,intervalMs);
+}
 async function start(){
   if(pool){
     try{
@@ -193,5 +207,7 @@ async function start(){
     }
   }
   app.listen(port,()=>console.log("Liholiswano API listening on port "+port));
+  if(process.env.ENABLE_TESTNET_INDEXER_WORKER==="true") startBackgroundWorker("indexer","indexer.js",Number(process.env.INDEXER_INTERVAL_MS||300000));
+  if(process.env.ENABLE_TESTNET_KEEPER_WORKER==="true") startBackgroundWorker("keeper","keeper.js",Number(process.env.KEEPER_INTERVAL_MS||300000));
 }
 start();
