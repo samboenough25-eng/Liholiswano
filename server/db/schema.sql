@@ -163,3 +163,6 @@ create table if not exists auth_tokens (
   created_at timestamptz not null default now()
 );
 create index if not exists idx_auth_tokens_user_purpose on auth_tokens(user_id,purpose);
+
+
+-- WhatsApp and indexing tables are kept in separate idempotent SQL files for clean module ownership.\n
