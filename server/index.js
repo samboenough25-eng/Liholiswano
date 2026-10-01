@@ -27,6 +27,7 @@ app.use(express.json({limit:"100kb"}));
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
+async function audit(actorUserId,action,entityType,entityId,metadata={}){await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,$2,$3,$4,$5)",[actorUserId,action,entityType,entityId,JSON.stringify(metadata||{})]);}
 const requireRole=roles=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({error:"Insufficient permissions"});
 function sign(user){if(!jwtSecret) throw new Error("JWT_SECRET is not configured.");return jwt.sign({sub:user.id,email:user.email,role:user.role},jwtSecret,{expiresIn:process.env.JWT_EXPIRES_IN||"2h",issuer:"liholiswano"});}
 async function auth(req,res,next){
