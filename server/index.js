@@ -78,6 +78,8 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
   }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(200);}
 });
 
+app.get("/api/system/status",auth,requireRole(["admin","compliance","support"]),async(req,res)=>{let chain={status:"not_configured"};try{const {chainInfo}=require("./blockchain");chain=await chainInfo();}catch(e){chain={status:"error",message:String(e.message).slice(0,200)}}res.json({api:"ok",database:pool?"configured":"not_configured",whatsapp:Boolean(process.env.WHATSAPP_API_URL&&process.env.WHATSAPP_ACCESS_TOKEN),kyc:Boolean(process.env.KYC_PROVIDER),compliance:Boolean(process.env.COMPLIANCE_API_URL&&process.env.COMPLIANCE_API_KEY),walletMode:process.env.WALLET_MODE||"managed",chain});});
+
 app.get("/health",async(req,res)=>{
   let database="not_configured";
   if(pool){try{await pool.query("select 1");database="ok";}catch{database="error";}}
