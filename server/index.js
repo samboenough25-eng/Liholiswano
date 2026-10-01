@@ -54,8 +54,9 @@ app.get("/api/whatsapp/webhook",(req,res)=>{
 });
 app.post("/api/whatsapp/webhook",async(req,res)=>{
   try{
-    const raw=JSON.stringify(req.body||{});
-    if(process.env.WHATSAPP_APP_SECRET && !verifySignature(raw,req.headers["x-hub-signature-256"],process.env.WHATSAPP_APP_SECRET)) return res.sendStatus(401);
+    const raw=req.rawBody;
+    if(!process.env.WHATSAPP_APP_SECRET) return res.status(503).json({error:"WhatsApp webhook security is not configured"});
+    if(!raw || !verifySignature(raw,req.headers["x-hub-signature-256"],process.env.WHATSAPP_APP_SECRET)) return res.sendStatus(401);
     const msg=normalizeInbound(req.body);
     if(!msg) return res.sendStatus(200);
     const phone=msg.phone;
