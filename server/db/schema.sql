@@ -153,6 +153,14 @@ create index if not exists idx_audit_log_actor_created on audit_log(actor_user_i
 alter table users add column if not exists email_verified_at timestamptz;
 alter table users add column if not exists phone_verified_at timestamptz;
 
+-- Backward-compatible wallet migrations for databases created by earlier Liholiswano versions.
+-- CREATE TABLE IF NOT EXISTS does not modify an already-existing table.
+alter table wallets add column if not exists chain_id bigint not null default 97;
+alter table wallets add column if not exists label varchar(80);
+alter table wallets add column if not exists is_primary boolean not null default false;
+alter table wallets add column if not exists verified_at timestamptz;
+create unique index if not exists uq_primary_wallet on wallets(user_id) where is_primary=true;
+
 create table if not exists auth_tokens (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
