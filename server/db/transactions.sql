@@ -1,0 +1,3 @@
+create table if not exists idempotency_keys (key varchar(255) primary key,user_id uuid references users(id) on delete cascade,operation varchar(96) not null,response jsonb,created_at timestamptz not null default now());
+create index if not exists idx_idempotency_user on idempotency_keys(user_id);
+create table if not exists reconciliation_runs(id uuid primary key default gen_random_uuid(),chain_id bigint not null,started_at timestamptz not null default now(),finished_at timestamptz,status varchar(32) not null,details jsonb not null default '{}'::jsonb);
