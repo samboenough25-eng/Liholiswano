@@ -1,0 +1,38 @@
+name: BNB Testnet ROSCA E2E
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testnet-e2e:
+    name: Run BNB Testnet ROSCA cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout BNB application branch
+        uses: actions/checkout@v4
+        with:
+          ref: bnb-app-complete
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run controlled Testnet ROSCA cycle
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BNB_CONTRACT_ADDRESS: 0xe9b104260c940fAE26a73e4E9c952fD18fFd2014
+          TEST_TOKEN_CONTRACT: 0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29
+        run: node scripts/e2e-testnet.js
