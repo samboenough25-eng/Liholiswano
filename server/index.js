@@ -9,6 +9,8 @@ const {z}=require("zod");
 const bcrypt=require("bcryptjs");
 const jwt=require("jsonwebtoken");
 const {Pool}=require("pg");
+const {normalizePhone,verifySignature,normalizeInbound,menu,sendText}=require("./whatsapp");
+const {handleCommand}=require("./whatsapp-router");
 
 const app=express();
 const port=Number(process.env.PORT||3000);
@@ -42,6 +44,39 @@ async function auth(req,res,next){
     req.user=r.rows[0]; next();
   }catch(e){return res.status(401).json({error:"Invalid or expired authentication token"});}
 }
+
+
+// Provider-neutral WhatsApp webhook. Provider credentials stay in environment variables.
+app.get("/api/whatsapp/webhook",(req,res)=>{
+  const mode=req.query["hub.mode"], token=req.query["hub.verify_token"], challenge=req.query["hub.challenge"];
+  if(mode==="subscribe" && process.env.WHATSAPP_VERIFY_TOKEN && token===process.env.WHATSAPP_VERIFY_TOKEN) return res.status(200).send(String(challenge||""));
+  return res.sendStatus(403);
+});
+app.post("/api/whatsapp/webhook",async(req,res)=>{
+  try{
+    const raw=JSON.stringify(req.body||{});
+    if(process.env.WHATSAPP_APP_SECRET && !verifySignature(raw,req.headers["x-hub-signature-256"],process.env.WHATSAPP_APP_SECRET)) return res.sendStatus(401);
+    const msg=normalizeInbound(req.body);
+    if(!msg) return res.sendStatus(200);
+    const phone=msg.phone;
+    const contact=await db().query("insert into whatsapp_contacts(phone,last_seen_at,updated_at) values($1,now(),now()) on conflict(phone) do update set last_seen_at=now(),updated_at=now() returning id,user_id",[phone]);
+    const contactId=contact.rows[0].id;
+    const existing=await db().query("select id from whatsapp_messages where provider_message_id=$1",[msg.messageId]);
+    if(existing.rowCount) return res.sendStatus(200);
+    await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
+    let reply;
+    if(!contact.rows[0].user_id){
+      const user=await db().query("select id from users where phone=$1",[phone]);
+      if(user.rowCount){
+        await db().query("update whatsapp_contacts set user_id=$1,verified_at=coalesce(verified_at,now()) where id=$2",[user.rows[0].id,contactId]);
+        reply=await handleCommand({phone,text:msg.text,db:db()});
+      } else reply="Your WhatsApp number is not linked to a Liholiswano account yet. Please complete account setup first.";
+    } else reply=await handleCommand({phone,text:msg.text,db:db()});
+    const outbound=await sendText({to:phone,text:reply});
+    if(outbound.status==="sent") await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'sent')",[contactId,"local:"+msg.messageId,reply]);
+    res.sendStatus(200);
+  }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(200);}
+});
 
 app.get("/health",async(req,res)=>{
   let database="not_configured";
@@ -144,6 +179,7 @@ async function start(){
     try{
       const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
       await pool.query(schema);
+      for(const file of ["whatsapp.sql","indexer.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
       console.log("Database schema ready");
     }catch(e){
       console.error("Database initialization failed:",e.message);
