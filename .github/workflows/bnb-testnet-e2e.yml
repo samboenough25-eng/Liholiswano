@@ -36,3 +36,5 @@ jobs:
           BNB_CONTRACT_ADDRESS: "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014"
           TEST_TOKEN_CONTRACT: "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29"
         run: node scripts/e2e-testnet.js
+
+# YAML address values are quoted so GitHub parses them as strings.
