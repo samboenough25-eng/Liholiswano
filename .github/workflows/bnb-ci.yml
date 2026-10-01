@@ -18,3 +18,11 @@ jobs:
       - run: npm test
       - run: npm run e2e:local
       - run: npm run validate:web
+      - name: Run BNB Testnet ROSCA cycle
+        if: contains(github.event.head_commit.message, '[testnet-e2e]')
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BNB_CONTRACT_ADDRESS: 0xe9b104260c940fAE26a73e4E9c952fD18fFd2014
+          TEST_TOKEN_CONTRACT: 0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29
+        run: node scripts/e2e-testnet.js
