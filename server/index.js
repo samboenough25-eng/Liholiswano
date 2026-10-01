@@ -197,6 +197,28 @@ function startBackgroundWorker(name,script,intervalMs){
 async function start(){
   if(pool){
     try{
+      // Older deployments may contain numeric group IDs. The current application uses UUID group IDs.
+      // Move incompatible legacy tables aside before the idempotent schema creates the current tables.
+      const groupId=await pool.query(
+        "select data_type from information_schema.columns where table_schema='public' and table_name='groups' and column_name='id'"
+      );
+      if(groupId.rowCount && groupId.rows[0].data_type!=="uuid"){
+        const legacy=await pool.query(
+          "select 1 from information_schema.tables where table_schema='public' and table_name='groups_legacy'"
+        );
+        if(legacy.rowCount) throw new Error("Both incompatible groups and groups_legacy tables exist; manual migration required");
+        await pool.query('alter table groups rename to groups_legacy');
+      }
+      const membershipGroupId=await pool.query(
+        "select data_type from information_schema.columns where table_schema='public' and table_name='group_memberships' and column_name='group_id'"
+      );
+      if(membershipGroupId.rowCount && membershipGroupId.rows[0].data_type!=="uuid"){
+        const legacy=await pool.query(
+          "select 1 from information_schema.tables where table_schema='public' and table_name='group_memberships_legacy'"
+        );
+        if(legacy.rowCount) throw new Error("Both incompatible group_memberships and group_memberships_legacy tables exist; manual migration required");
+        await pool.query('alter table group_memberships rename to group_memberships_legacy');
+      }
       const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
       await pool.query(schema);
       for(const file of ["whatsapp.sql","indexer.sql","transactions.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
