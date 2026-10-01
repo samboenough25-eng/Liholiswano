@@ -179,7 +179,7 @@ async function start(){
     try{
       const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
       await pool.query(schema);
-      for(const file of ["whatsapp.sql","indexer.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
+      for(const file of ["whatsapp.sql","indexer.sql","transactions.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
       console.log("Database schema ready");
     }catch(e){
       console.error("Database initialization failed:",e.message);
