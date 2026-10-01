@@ -1,4 +1,4 @@
-const { ethers } = require("ethers");
+// BNB Testnet controlled E2E: this script uses test wallets and MockUSDT only.\nconst { ethers } = require("ethers");
 
 const RPC = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet.bnbchain.org";
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
