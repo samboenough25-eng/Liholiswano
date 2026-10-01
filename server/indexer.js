@@ -4,11 +4,14 @@ const {JsonRpcProvider,Interface,isAddress,getAddress}=require("ethers");
 const {PROTOCOL_ABI}=require("./blockchain");
 
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
-const RPC=process.env.BSC_TESTNET_RPC_URL||"https://data-seed-prebsc-1-s1.bnbchain.org:8545";
+const RPC=process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
+const EXPECTED_CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
 const MAX_RANGE=Number(process.env.INDEXER_MAX_BLOCK_RANGE||1000);
 const INITIAL_LOOKBACK=Number(process.env.INDEXER_INITIAL_LOOKBACK||5000);
-const START_BLOCK=process.env.INDEXER_START_BLOCK==null?null:Number(process.env.INDEXER_START_BLOCK);
+const START_BLOCK=process.env.INDEXER_START_BLOCK==null||process.env.INDEXER_START_BLOCK===""?null:Number(process.env.INDEXER_START_BLOCK);
+
+if(EXPECTED_CHAIN_ID!==97) throw new Error("BSC_CHAIN_ID must be 97 for the current Testnet indexer");
 if(!Number.isInteger(CONFIRMATIONS)||CONFIRMATIONS<0) throw new Error("INDEXER_CONFIRMATIONS must be a non-negative integer");
 if(!Number.isInteger(MAX_RANGE)||MAX_RANGE<1) throw new Error("INDEXER_MAX_BLOCK_RANGE must be a positive integer");
 if(START_BLOCK!==null&&(!Number.isSafeInteger(START_BLOCK)||START_BLOCK<0)) throw new Error("INDEXER_START_BLOCK must be a non-negative integer");
@@ -59,15 +62,7 @@ async function ensureSchema(){
     alter table reconciliation_runs add column if not exists details jsonb not null default '{}'::jsonb;
     alter table reconciliation_runs add column if not exists started_at timestamptz not null default now();
     alter table reconciliation_runs add column if not exists status varchar(32) not null default 'running';
-    do $$
-    begin
-      if exists(select 1 from information_schema.columns where table_name='reconciliation_runs' and column_name='report')
-         and not exists(select 1 from information_schema.columns where table_name='reconciliation_runs' and column_name='details') then
-        alter table reconciliation_runs add column details jsonb not null default '{}'::jsonb;
-      end if;
-    end $$;
     `);
-  // Older schema used report/completed_at. Keep them if present and backfill the canonical columns.
   const cols=await pool.query(`select column_name from information_schema.columns where table_name='reconciliation_runs' and column_name in ('report','completed_at')`);
   const names=new Set(cols.rows.map(r=>r.column_name));
   if(names.has("report")) await pool.query("update reconciliation_runs set details=coalesce(details,report,'{}'::jsonb) where details is null or details='{}'::jsonb");
@@ -117,7 +112,11 @@ async function run(){
   const lock=await pool.query("select pg_try_advisory_lock(hashtext('liholiswano-bnb-indexer')) as locked");
   if(!lock.rows[0].locked) return {status:"already_running"};
   try{
-    const net=await rpc.getNetwork(); const chainId=Number(net.chainId); const latest=await rpc.getBlockNumber();
+    const net=await rpc.getNetwork(); const chainId=Number(net.chainId);
+    if(chainId!==EXPECTED_CHAIN_ID) throw new Error(`RPC chain mismatch: expected ${EXPECTED_CHAIN_ID}, got ${chainId}`);
+    const latest=await rpc.getBlockNumber();
+    const code=await rpc.getCode(CONTRACT);
+    if(!code||code==="0x") throw new Error("BNB_CONTRACT_ADDRESS has no deployed contract code on the configured network");
     const safeLatest=Math.max(0,latest-CONFIRMATIONS); const contractAddress=getAddress(CONTRACT);
     const state=await loadState(chainId,contractAddress,safeLatest); await verifyCursor(state);
     if(state.block>=safeLatest) return {chainId,latestBlock:latest,safeBlock:safeLatest,fromBlock:state.block+1,toBlock:safeLatest,processed:0,message:"nothing to index"};
