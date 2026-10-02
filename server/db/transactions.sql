@@ -52,3 +52,14 @@ create table if not exists transaction_events (
   created_at timestamptz not null default now()
 );
 create index if not exists idx_transaction_events_request on transaction_events(transaction_request_id,created_at desc);
+
+create table if not exists transaction_authorizations (
+  id uuid primary key default gen_random_uuid(),
+  transaction_request_id uuid not null references transaction_requests(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  token_hash varchar(64) not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_transaction_authorizations_expiry on transaction_authorizations(expires_at) where used_at is null;
