@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Liholiswano — Create account</title>
+<style>
+body{margin:0;background:#f5f7f6;color:#17211b;font:15px system-ui,Segoe UI,sans-serif}
+.wrap{max-width:560px;margin:auto;padding:28px 16px 60px}.card{background:#fff;border:1px solid #dbe5df;border-radius:14px;padding:22px}
+h1{margin-top:0}label{display:block;font-size:12px;color:#66736b;margin:12px 0 4px}
+input,select{width:100%;box-sizing:border-box;padding:11px;border:1px solid #ccd8d1;border-radius:8px}
+button{margin-top:14px;padding:11px 14px;border:0;border-radius:8px;background:#087f5b;color:white;font-weight:700;cursor:pointer}
+button.alt{background:white;color:#17211b;border:1px solid #ccd8d1}.status{margin-top:14px;padding:11px;border-radius:8px;background:#eef5f0;white-space:pre-wrap;word-break:break-word}.err{background:#fff0ef;color:#8f211c}
+.small{font-size:12px;color:#66736b}.hidden{display:none}a{color:#087f5b}
+</style>
+</head>
+<body><main class="wrap"><div class="card">
+<h1>Create your Liholiswano account</h1>
+<p class="small">This account flow is connected to the BNB implementation. Do not enter a seed phrase or private key.</p>
+<section id="registration">
+<label>Email</label><input id="email" type="email" autocomplete="email" required>
+<label>Password</label><input id="password" type="password" autocomplete="new-password" minlength="12" required>
+<label>Country</label><select id="country"><option value="BW">Botswana</option><option value="SZ">Eswatini</option></select>
+<label>Phone (optional)</label><input id="phone" autocomplete="tel">
+<button id="register">Create account</button>
+</section>
+<section id="verification" class="hidden">
+<h2>Verify your email</h2>
+<p>Enter the 6-digit code sent to <b id="sentTo"></b>.</p>
+<input id="code" inputmode="numeric" maxlength="6" placeholder="123456">
+<button id="verify">Verify email</button>
+<button id="resend" class="alt">Resend code</button>
+</section>
+<div id="status" class="status">Ready.</div>
+<p class="small"><a href="./dashboard.html">Go to customer dashboard</a></p>
+</div></main>
+<script>
+const API="https://liholiswano-bnb-api.onrender.com", $=id=>document.getElementById(id);
+let token="",email="";
+async function api(path,opt={}){opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
+function show(msg,error=false){$("status").className="status"+(error?" err":"");$("status").textContent=msg}
+$("register").onclick=async()=>{try{
+ email=$("email").value.trim().toLowerCase();const password=$("password").value;const country=$("country").value;const phone=$("phone").value.trim()||undefined;
+ if(password.length<12)throw Error("Password must be at least 12 characters.");
+ const d=await api("/api/auth/register",{method:"POST",body:JSON.stringify({email,password,country,phone})});
+ token=d.token||"";localStorage.setItem("lhs_token",token);
+ if(d.emailVerificationRequired){$("registration").classList.add("hidden");$("verification").classList.remove("hidden");$("sentTo").textContent=email;show(d.verification?.delivered===false&&d.verification?.devCode?"Development verification code: "+d.verification.devCode:"Verification code sent. Check your email.");}
+ else {show("Account created. You can now sign in.");}
+}catch(e){show(e.message,true)}};
+$("verify").onclick=async()=>{try{const code=$("code").value.trim();if(!/^\d{6}$/.test(code))throw Error("Enter the 6-digit verification code.");await api("/api/auth/email-verification/confirm",{method:"POST",body:JSON.stringify({code})});show("Email verified successfully. You can now sign in.");setTimeout(()=>location.href="./dashboard.html",700)}catch(e){show(e.message,true)}};
+$("resend").onclick=async()=>{try{const d=await api("/api/auth/email-verification/request",{method:"POST"});show(d.devCode?"Development verification code: "+d.devCode:"A new verification code was sent.");}catch(e){show(e.message,true)}};
+</script></body></html>
