@@ -268,6 +268,23 @@ create unique index if not exists uq_wallet_chain_address_lower on wallets(chain
 create index if not exists idx_wallet_challenges_expiry on wallet_challenges(expires_at) where used_at is null;
 
 
+-- Stage A compatibility guard: preserve any older incompatible KYC tables instead of failing startup.
+do $
+begin
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='kyc_identity_submissions')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='kyc_identity_submissions' and column_name='case_id') then
+    alter table kyc_identity_submissions rename to kyc_identity_submissions_legacy;
+  end if;
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='kyc_documents')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='kyc_documents' and column_name='case_id') then
+    alter table kyc_documents rename to kyc_documents_legacy;
+  end if;
+  if exists (select 1 from information_schema.tables where table_schema='public' and table_name='kyc_events')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='kyc_events' and column_name='case_id') then
+    alter table kyc_events rename to kyc_events_legacy;
+  end if;
+end $;
+
 -- Stage A: provider-neutral KYC workflow evidence and review state.
 create table if not exists kyc_identity_submissions (
   id uuid primary key default gen_random_uuid(),
