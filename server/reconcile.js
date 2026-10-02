@@ -5,7 +5,7 @@ const {PROTOCOL_ABI}=require("./blockchain");
 
 const CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
-const RPC=process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
+const RPC=process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
 const MAX_RANGE=Math.max(10,Number(process.env.RECONCILIATION_MAX_RANGE||100));
 const START=process.env.RECONCILIATION_START_BLOCK==null||process.env.RECONCILIATION_START_BLOCK===""?null:Number(process.env.RECONCILIATION_START_BLOCK);
@@ -25,6 +25,7 @@ function jsonSafe(v){if(typeof v==="bigint")return v.toString();if(Array.isArray
 function add(list,category,entityType,entityKey,expected,actual,severity="critical"){list.push({severity,category,entityType,entityKey,expected,actual});}
 
 async function ensureSchema(){
+ if(process.env.REQUIRE_DEDICATED_RPC==="true"&&!process.env.BSC_RPC_URL)throw new Error("A dedicated BSC_RPC_URL is required for production reconciliation");
  await pool.query(`
   create table if not exists reconciliation_state(
     chain_id bigint primary key, contract_address varchar(42) not null,
