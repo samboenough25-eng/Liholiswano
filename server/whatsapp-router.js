@@ -298,7 +298,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     try {
       const result = await prepareFinancialRequest(db, user, "join", id);
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "join", groupId: id });
-      return result+"\\n\\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the ROSCA join request: " + String(e.message || e);\n    }
+      return result+"\n\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the ROSCA join request: " + String(e.message || e);\n    }
   }
 
   if (normalized.startsWith("bid ")) {
@@ -309,7 +309,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     try{
       const result=await prepareFinancialRequest(db,user,"bid",parts[1],{bidBps:Math.round(bid*100)});
       if(conv)await setConversation(db,conv.id,"awaiting_confirmation",{operation:"bid",groupId:parts[1]});
-      return result+"\\n\\nReply CONFIRM <request ID> to continue.";
+      return result+"\n\nReply CONFIRM <request ID> to continue.";
     }catch(e){return "Unable to prepare the bid: "+String(e.message||e);}
   }
 
@@ -319,7 +319,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     try {
       const result = await prepareFinancialRequest(db, user, "contribute", parts[1]);
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "contribute", groupId: parts[1] });
-      return result+"\\n\\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the contribution request: " + String(e.message || e);\n    }
+      return result+"\n\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the contribution request: " + String(e.message || e);\n    }
   }
 
   if (normalized.startsWith("payout ")) {
