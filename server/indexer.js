@@ -76,7 +76,11 @@ async function loadState(chainId,contractAddress,safeLatest){
     return {block:configured-1,hash:null};
   }
   const row=r.rows[0];
-  if(row.contract_address&&row.contract_address.toLowerCase()!==contractAddress.toLowerCase()) throw new Error("indexer_state contract address does not match BNB_CONTRACT_ADDRESS");
+  if(row.contract_address&&row.contract_address.toLowerCase()!==contractAddress.toLowerCase()){
+    const configured=START_BLOCK!==null?START_BLOCK:Math.max(0,safeLatest-INITIAL_LOOKBACK);
+    await pool.query("delete from indexer_state where chain_id=$1",[chainId]);
+    return {block:configured-1,hash:null};
+  }
   return {block:Number(row.last_processed_block),hash:row.last_block_hash||null};
 }
 async function saveState(chainId,contractAddress,block,hash){
