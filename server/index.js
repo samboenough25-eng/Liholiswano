@@ -103,7 +103,7 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
     const outbound=await sendText({to:phone,text:reply});
     if(outbound.status==="sent") await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'sent')",[contactId,"local:"+msg.messageId,reply]);
     res.sendStatus(200);
-  }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(200);}
+  }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(500);}
 });
 
 app.get("/api/system/status",auth,requireRole(["admin","compliance","support"]),async(req,res)=>{let chain={status:"not_configured"};try{const {chainInfo}=require("./blockchain");chain=await chainInfo();}catch(e){chain={status:"error",message:String(e.message).slice(0,200)}}res.json({api:"ok",database:pool?"configured":"not_configured",whatsapp:Boolean(process.env.WHATSAPP_API_URL&&process.env.WHATSAPP_ACCESS_TOKEN),kyc:Boolean(process.env.KYC_PROVIDER),compliance:Boolean(process.env.COMPLIANCE_API_URL&&process.env.COMPLIANCE_API_KEY),walletMode:process.env.WALLET_MODE||"managed",chain});});
