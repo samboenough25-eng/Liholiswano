@@ -40,7 +40,7 @@ async function issueEmailVerification(userId,email){
   await db().query("insert into auth_tokens(user_id,token_hash,purpose,expires_at) values($1,$2,'email_verify',now()+interval '15 minutes')",[userId,tokenHash]);
   if(process.env.EMAIL_DEV_MODE==="true") return {delivered:false,devCode:code};
   if(!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM) throw new Error("Email verification provider is not configured");
-  const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json","Authorization:"Bearer "+process.env.RESEND_API_KEY},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[email],subject:"Liholiswano email verification code",html:"<p>Your Liholiswano verification code is:</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">"+code+"</p><p>This code expires in 15 minutes.</p>"})});
+  const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+process.env.RESEND_API_KEY},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[email],subject:"Liholiswano email verification code",html:"<p>Your Liholiswano verification code is:</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">"+code+"</p><p>This code expires in 15 minutes.</p>"})});
   if(!response.ok) throw new Error("Email provider rejected the verification message");
   const data=await response.json().catch(()=>({}));
   return {delivered:true,providerReference:data.id||null};
