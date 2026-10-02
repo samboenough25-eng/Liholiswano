@@ -12,16 +12,31 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "20"
 
-      - run: npm install
-      - run: npm run check:js
-      - run: npm run api:check
-      - run: npm run compile
-      - run: npm test
-      - run: npm run e2e:local
-      - run: npm run validate:web
+      - name: Install dependencies
+        run: npm install
+
+      - name: JavaScript syntax
+        run: npm run check:js
+
+      - name: API syntax
+        run: npm run api:check
+
+      - name: Solidity compile
+        run: npm run compile
+
+      - name: Contract tests
+        run: npm test
+
+      - name: Local ROSCA E2E
+        run: npm run e2e:local
+
+      - name: Web validation
+        run: npm run validate:web
