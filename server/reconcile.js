@@ -123,7 +123,7 @@ async function run(){
    const byOnchain=new Map(dbGroups.rows.map(g=>[String(g.onchain_group_id).toLowerCase(),g]));
    for(const rawId of groupIds){
     const id=String(rawId), cg=await chainGroup(rawId), db=byOnchain.get(id.toLowerCase());
-    if(!db){add(discrepancies,"missing_group","group",id,{onchainGroupId:id},{database:false});continue;}
+    if(!db){add(discrepancies,"missing_group","group",id,{onchainGroupId:id},{database:false},"warning");continue;}
     const expected={locked:cg.locked,token:cg.token,contribution:cg.contribution,collateral:cg.collateral,maxMembers:cg.maxMembers,maxBidBps:cg.maxBidBps,round:cg.round,rotation:cg.rotation,reserve:cg.reserve,uncoveredShortfall:cg.uncoveredShortfall,escrowBalance:cg.escrowBalance,memberCount:cg.memberCount};
     const actual={token:db.metadata?.token||null};
     if(db.contract_address&&!eq(db.contract_address,CONTRACT))add(discrepancies,"contract_mismatch","group",id,{contract:CONTRACT},{contract:db.contract_address});
