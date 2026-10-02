@@ -135,7 +135,7 @@ async function run(){
     const latest=await rpc.getBlockNumber();
     const code=await rpc.getCode(CONTRACT);
     if(!code||code==="0x") throw new Error("BNB_CONTRACT_ADDRESS has no deployed contract code on the configured network");
-    const safeLatest=Math.max(0,latest-CONFIRMATIONS); const contractAddress=getAddress(CONTRACT);
+    const finalized=await rpc.getBlock("finalized").catch(()=>null); const safeLatest=finalized?.number!=null?Number(finalized.number):Math.max(0,latest-CONFIRMATIONS); const contractAddress=getAddress(CONTRACT);
     const state=await loadState(chainId,contractAddress,safeLatest); await verifyCursor(state);
     if(state.block>=safeLatest) return {chainId,latestBlock:latest,safeBlock:safeLatest,fromBlock:state.block+1,toBlock:safeLatest,processed:0,message:"nothing to index"};
     const from=state.block+1; const to=Math.min(safeLatest,from+MAX_RANGE-1);
