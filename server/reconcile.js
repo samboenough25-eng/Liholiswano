@@ -2,9 +2,11 @@ require("dotenv").config();
 const {Pool}=require("pg");
 const {JsonRpcProvider,Interface,Contract,isAddress,formatUnits,getAddress}=require("ethers");
 const {PROTOCOL_ABI}=require("./blockchain");
+const {SUBSCRIPTION_ABI}=require("./subscriptions");
 
 const CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
+const SUBSCRIPTION_CONTRACT=process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
 const RPC=process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
 const MAX_RANGE=Math.max(10,Number(process.env.RECONCILIATION_MAX_RANGE||100));
@@ -13,6 +15,7 @@ const START=process.env.RECONCILIATION_START_BLOCK==null||process.env.RECONCILIA
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="false"?false:{rejectUnauthorized:false}});
 const rpc=new JsonRpcProvider(RPC);
 const iface=new Interface(PROTOCOL_ABI);
+const subscriptionIface=new Interface(SUBSCRIPTION_ABI);
 const ERC20=new Interface([
  "event Transfer(address indexed from,address indexed to,uint256 value)",
  "function decimals() view returns (uint8)",
@@ -240,6 +243,32 @@ async function reconcileGroups(runId,discrepancies,tokenCache){
  }
  return ids.length;
 }
+async function reconcileSubscriptions(from,to,discrepancies){
+ if(!SUBSCRIPTION_CONTRACT||!isAddress(SUBSCRIPTION_CONTRACT))return;
+ const logs=[];
+ for(let a=from;a<=to;a+=MAX_RANGE){
+  const b=Math.min(to,a+MAX_RANGE-1);
+  try{logs.push(...await rpc.getLogs({address:SUBSCRIPTION_CONTRACT,fromBlock:a,toBlock:b}));}
+  catch(e){add(discrepancies,"subscription_log_read_error","subscription_range",String(a)+"-"+String(b),{readable:true},{error:e.message},"critical");return;}
+ }
+ for(const log of logs){
+  let p;try{p=subscriptionIface.parseLog({topics:log.topics,data:log.data});}catch{continue;}
+  if(!p||p.name!=="SubscriptionPaid")continue;
+  const key=String(p.args.subscriptionKey);
+  const q=await pool.query("select id,status,token_address,token_amount_base_units,customer_key,period_start,subscription_contract from subscription_payments where lower(subscription_key)=lower($1) limit 1",[key]);
+  if(!q.rowCount){add(discrepancies,"subscription_unmapped_event","subscription_event",String(log.transactionHash)+":"+log.index,{subscriptionKey:key},{databasePayment:false},"warning");continue;}
+  const payment=q.rows[0];
+  const expectedPeriod=Math.floor(new Date(payment.period_start).getTime()/1000);
+  const ok=String(p.args.customerKey).toLowerCase()===String(payment.customer_key).toLowerCase() &&
+    String(p.args.token).toLowerCase()===String(payment.token_address).toLowerCase() &&
+    BigInt(p.args.amount)===BigInt(payment.token_amount_base_units) &&
+    Number(p.args.periodStart)===expectedPeriod &&
+    String(log.address).toLowerCase()===String(payment.subscription_contract).toLowerCase();
+  if(!ok){add(discrepancies,"subscription_event_mismatch","subscription_payment",String(payment.id),{subscriptionKey:key,amount:String(payment.token_amount_base_units)},{event:p.args},"critical");continue;}
+  await pool.query("update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=coalesce(confirmed_at,now()),updated_at=now(),error_message=null where id=$1 and status<>'confirmed'",[payment.id,log.transactionHash]);
+  await pool.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed_reconciled',$2)",[payment.id,JSON.stringify({txHash:log.transactionHash,logIndex:log.index,source:"reconciliation"})]);
+ }
+}
 async function reconcileTransactionRequests(discrepancies){
  const q=await pool.query("select tx_hash,action,status,chain_id,contract_address,id from blockchain_transactions where chain_id=$1 and tx_hash is not null order by submitted_at desc limit 200",[CHAIN_ID]);
  for(const row of q.rows){
@@ -279,6 +308,7 @@ async function run(){
     for(const ev of facts.rows){try{await recoverTransactionRequestFromEvent(ev); await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`\${ev.tx_hash}:\${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
    }
    await reconcileTransactionRequests(discrepancies);
+   if(from<=to) await reconcileSubscriptions(from,to,discrepancies);
    const endHash=to>=0?(await rpc.getBlock(to))?.hash:null;
    if(to>=from&&endHash)await saveCursor(to,endHash);
    const status=discrepancies.some(x=>x.severity==="critical")?"failed":discrepancies.length?"warning":"completed";
