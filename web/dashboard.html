@@ -3,18 +3,101 @@
 <style>body{font:15px system-ui;margin:0;background:#f5f7f6;color:#17211b}.wrap{max-width:1050px;margin:auto;padding:20px}.card{background:white;border:1px solid #dbe5df;border-radius:12px;padding:16px;margin:12px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}input,button{padding:10px;border-radius:8px;border:1px solid #ccd8d1}button{background:#087f5b;color:white;border:0;font-weight:700}.status{white-space:pre-wrap;word-break:break-word;background:#eef5f0;padding:10px;border-radius:8px}.muted{color:#66736b;font-size:13px}</style></head>
 <body><main class="wrap"><h1>Liholiswano Customer Dashboard</h1><p class="muted">Account, KYC, wallet, savings groups, transactions and support.</p>
 <p><a href="./register.html">Create a new customer account</a></p><section class="card"><h2>Sign in</h2><div class="grid"><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"></div><p><button id="login">Sign in</button> <button id="logout">Sign out</button></p><div id="status" class="status">Not signed in.</div></section>
-<section class="card"><h2>WhatsApp</h2><p class="muted">Link and verify the WhatsApp number you control. Liholiswano will send a one-time code; do not share that code with anyone.</p><input id="waPhone" placeholder="+267... or +268..."><button id="waLink">Send WhatsApp linking code</button><div id="waStatus" class="status">Not linked through this dashboard session.</div></section><section class="card"><h2>Wallet ownership</h2><p class="muted">Connect your BNB Testnet wallet and sign a verification message. The signature proves wallet control; it does not authorize a transaction.</p><button id="verifyWallet">Verify connected wallet</button><div id="walletVerify" class="status">Not verified in this session.</div></section><section class="grid"><div class="card"><h2>Profile</h2><div id="profile" class="status">—</div></div><div class="card"><h2>KYC</h2><div id="kyc" class="status">—</div><p><button id="startKyc">Start KYC</button></p></div><div class="card"><h2>Compliance</h2><div id="compliance" class="status">—</div></div><div class="card"><h2>Wallets</h2><div id="wallets" class="status">—</div></div></section>
+<section class="card"><h2>WhatsApp</h2><p class="muted">Link and verify the WhatsApp number you control. Liholiswano will send a one-time code; do not share that code with anyone.</p><input id="waPhone" placeholder="+267... or +268..."><button id="waLink">Send WhatsApp linking code</button><div id="waStatus" class="status">Not linked through this dashboard session.</div></section><section class="card"><h2>Wallet ownership</h2><p class="muted">Connect your BNB Testnet wallet and sign a verification message. The signature proves wallet control; it does not authorize a transaction.</p><button id="verifyWallet">Verify connected wallet</button><div id="walletVerify" class="status">Not verified in this session.</div></section><section class="grid"><div class="card"><h2>Profile</h2><div id="profile" class="status">—</div></div><div class="card"><h2>KYC — Stage A</h2>
+<div id="kyc" class="status">—</div>
+<p class="muted">Stage A is a provider-neutral development workflow. It records your identity information and consent and sends the case to an authorized reviewer. It does not claim that your ID, selfie, liveness, or government database has been verified.</p>
+<p><button id="startKyc">Start / resume KYC</button></p>
+<div id="kycForm" style="display:none">
+<div class="grid">
+<input id="kycFirstName" placeholder="Legal first name">
+<input id="kycLastName" placeholder="Legal last name">
+<input id="kycDob" type="date" aria-label="Date of birth">
+<select id="kycDocType"><option value="national_id">National ID</option><option value="passport">Passport</option></select>
+<select id="kycDocCountry"><option value="BW">Botswana</option><option value="SZ">Eswatini</option></select>
+<input id="kycLast4" maxlength="4" inputmode="numeric" placeholder="Last 4 ID/passport digits (optional)">
+<input id="kycCity" maxlength="100" placeholder="Residential city (optional)">
+</div>
+<label style="display:block;margin-top:10px"><input id="kycConsent" type="checkbox" style="width:auto"> I consent to Liholiswano collecting and reviewing the information submitted in this Stage-A KYC workflow.</label>
+<p><button id="saveKycIdentity">Save identity information</button></p>
+<label>Identity document file (metadata only in Stage A)</label>
+<input id="kycFile" type="file" accept=".jpg,.jpeg,.png,.pdf">
+<p class="muted">The current Stage-A implementation records the file's type, size and SHA-256 fingerprint only. It does not store the identity document on Render.</p>
+<p><button id="recordKycDocument">Record document metadata</button> <button id="submitKyc">Submit for compliance review</button></p>
+<div id="kycAction" class="status">No KYC action yet.</div>
+</div></div><div class="card"><h2>Compliance</h2><div id="compliance" class="status">—</div></div><div class="card"><h2>Wallets</h2><div id="wallets" class="status">—</div></div></section>
 <section class="card"><h2>ROSCA financial actions</h2><p class="muted">These actions use your connected verified wallet. Liholiswano prepares the request server-side, then your wallet signs the on-chain transaction. The WhatsApp channel can start the request, but it never receives custody of funds.</p><input id="actionGroup" placeholder="On-chain group ID (0x... bytes32)"><input id="bidBps" placeholder="Bid % e.g. 5" type="number" min="0" step="0.01"><p><button id="joinOnchain">Join ROSCA</button><button id="contributeOnchain">Contribute</button><button id="bidOnchain">Submit bid</button></p><div id="financialStatus" class="status">No financial action started.</div></section><section class="card"><h2>Savings groups</h2><button id="groups">Refresh groups</button><div id="groupsOut" class="status">—</div></section>
 <section class="card"><h2>Transactions & activity</h2><button id="activity">Refresh activity</button><div id="activityOut" class="status">—</div></section>
 <section class="card"><h2>Support</h2><input id="subject" placeholder="Subject"><br><br><input id="description" placeholder="How can we help?"><p><button id="ticket">Create ticket</button></p></section>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script src="./config.js"></script><script>const C=window.LIHOLISWANO_CONFIG;window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
 const API=(window.LIHOLISWANO_API||location.origin), $=x=>document.getElementById(x);let token=localStorage.getItem("lhs_token")||"";
 async function api(path,opt={}){opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
-async function refresh(){if(!token)return;try{const [p,k,w,g,t,l,n,cs]=await Promise.all([api("/api/profile"),api("/api/kyc"),api("/api/wallets"),api("/api/groups"),api("/api/transactions"),api("/api/ledger"),api("/api/notifications"),api("/api/compliance/status")]);$("profile").textContent=JSON.stringify(p.profile,null,2);$("kyc").textContent=JSON.stringify(k,null,2);$("wallets").textContent=JSON.stringify(w.wallets,null,2);$("groupsOut").textContent=JSON.stringify(g.groups,null,2);$("activityOut").textContent=JSON.stringify({transactions:t.transactions,ledger:l.entries,notifications:n.notifications},null,2);$("compliance").textContent=JSON.stringify(cs,null,2);$("status").textContent="Signed in."; }catch(e){$("status").textContent=e.message}}
+async function refresh(){if(!token)return;try{const [p,k,w,g,t,l,n,cs]=await Promise.all([api("/api/profile"),api("/api/kyc/stage-a"),api("/api/wallets"),api("/api/groups"),api("/api/transactions"),api("/api/ledger"),api("/api/notifications"),api("/api/compliance/status")]);$("profile").textContent=JSON.stringify(p.profile,null,2);$("kyc").textContent=JSON.stringify(k,null,2);$("wallets").textContent=JSON.stringify(w.wallets,null,2);$("groupsOut").textContent=JSON.stringify(g.groups,null,2);$("activityOut").textContent=JSON.stringify({transactions:t.transactions,ledger:l.entries,notifications:n.notifications},null,2);$("compliance").textContent=JSON.stringify(cs,null,2);$("status").textContent="Signed in."; }catch(e){$("status").textContent=e.message}}
 $("waLink").onclick=async()=>{try{if(!token)throw Error("Sign in first.");const d=await api("/api/whatsapp/link/request",{method:"POST",body:JSON.stringify({phone:$("waPhone").value})});$("waStatus").textContent="Linking code sent to "+d.phone+". Open WhatsApp and reply LINK followed by the 6-digit code.";await refresh()}catch(e){$("waStatus").textContent=e.message}};
 $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value,password:$("password").value})});token=d.token;localStorage.setItem("lhs_token",token);await refresh()}catch(e){$("status").textContent=e.message}};
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
-$("groups").onclick=refresh;$("activity").onclick=refresh;$("startKyc").onclick=async()=>{try{const d=await api("/api/kyc/cases",{method:"POST",body:JSON.stringify({})});$("kyc").textContent=JSON.stringify(d,null,2);await refresh()}catch(e){$("kyc").textContent=e.message}};
+$("groups").onclick=refresh;$("activity").onclick=refresh;let currentKycCase=null;
+async function loadStageAKyc(){
+  const d=await api("/api/kyc/stage-a");
+  currentKycCase=d.latestCase;
+  $("kyc").textContent=JSON.stringify({status:d.status,provider:d.provider,latestCase:d.latestCase,identity:d.identity,documents:d.documents},null,2);
+  if(d.identity){
+    $("kycFirstName").value=d.identity.legal_first_name||"";
+    $("kycLastName").value=d.identity.legal_last_name||"";
+    $("kycDob").value=d.identity.date_of_birth?String(d.identity.date_of_birth).slice(0,10):"";
+    $("kycDocType").value=d.identity.document_type||"national_id";
+    $("kycDocCountry").value=d.identity.document_country||"BW";
+    $("kycLast4").value=d.identity.document_last4||"";
+    $("kycCity").value=d.identity.residential_city||"";
+  }
+  return d;
+}
+$("startKyc").onclick=async()=>{
+  try{
+    if(!token)throw Error("Sign in first.");
+    let d=await loadStageAKyc();
+    if(!d.latestCase || ["approved","rejected"].includes(d.latestCase.status)){
+      d=await api("/api/kyc/stage-a/cases",{method:"POST",body:JSON.stringify({})});
+      currentKycCase=d.case;
+    }
+    $("kycForm").style.display="block";
+    await loadStageAKyc();
+  }catch(e){$("kycAction").textContent=e.message}
+};
+$("saveKycIdentity").onclick=async()=>{
+  try{
+    if(!currentKycCase)await loadStageAKyc();
+    if(!currentKycCase)throw Error("Start KYC first.");
+    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/identity",{method:"POST",body:JSON.stringify({
+      firstName:$("kycFirstName").value,lastName:$("kycLastName").value,dateOfBirth:$("kycDob").value,
+      documentType:$("kycDocType").value,documentCountry:$("kycDocCountry").value,
+      documentLast4:$("kycLast4").value||undefined,residentialCity:$("kycCity").value||undefined,
+      consent:$("kycConsent").checked
+    })});
+    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();
+  }catch(e){$("kycAction").textContent=e.message}
+};
+$("recordKycDocument").onclick=async()=>{
+  try{
+    if(!currentKycCase)throw Error("Start KYC first.");
+    const file=$("kycFile").files[0];if(!file)throw Error("Choose an identity document first.");
+    if(file.size>10*1024*1024)throw Error("Document must be 10 MB or smaller.");
+    const allowed=["image/jpeg","image/png","application/pdf"];if(!allowed.includes(file.type))throw Error("Use JPG, PNG or PDF.");
+    const buf=await file.arrayBuffer();const hash=await crypto.subtle.digest("SHA-256",buf);
+    const sha=Array.from(new Uint8Array(hash)).map(x=>x.toString(16).padStart(2,"0")).join("");
+    const type=$("kycDocType").value==="passport"?"passport":"identity_front";
+    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/documents/metadata",{method:"POST",body:JSON.stringify({
+      documentType:type,filename:file.name,contentType:file.type,byteSize:file.size,sha256:sha
+    })});
+    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();
+  }catch(e){$("kycAction").textContent=e.message}
+};
+$("submitKyc").onclick=async()=>{
+  try{
+    if(!currentKycCase)throw Error("Start KYC first.");
+    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/submit",{method:"POST",body:"{}"});
+    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();await refresh();
+  }catch(e){$("kycAction").textContent=e.message}
+};
 $("verifyWallet").onclick=async()=>{try{if(!token)throw Error("Sign in first.");if(!window.ethereum)throw Error("No EVM wallet detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");const provider=new ethers.BrowserProvider(window.ethereum);const signer=await provider.getSigner();const address=await signer.getAddress();const network=await provider.getNetwork();if(network.chainId!==97n)throw Error("Switch the wallet to BNB Smart Chain Testnet.");const challenge=await api("/api/wallets/challenge",{method:"POST",body:JSON.stringify({address,chainId:97})});const signature=await signer.signMessage(challenge.message);const linked=await api("/api/wallets",{method:"POST",body:JSON.stringify({address,chainId:97,message:challenge.message,signature,primary:true,label:"BNB Testnet wallet"})});$("walletVerify").textContent=JSON.stringify(linked,null,2);await refresh()}catch(e){$("walletVerify").textContent=e.message}};
 let provider=null,signer=null,address=null;
 const FIN_ABI=["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)"];
