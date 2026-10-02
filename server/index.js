@@ -15,6 +15,7 @@ const {Pool}=require("pg");
 const {normalizePhone,verifySignature,normalizeInbound,menu,sendText}=require("./whatsapp");
 const {handleCommand}=require("./whatsapp-router");
 const {installStageAKyc}=require("./kyc-stage-a");
+const {installSubscriptions}=require("./subscriptions");
 
 const app=express();
 const port=Number(process.env.PORT||3000);
@@ -295,6 +296,7 @@ app.get("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(r
 app.post("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(req,res)=>{const uid=String(req.body.userId||""),type=String(req.body.screeningType||""),status=String(req.body.status||"pending");if(!uid||!["sanctions","pep","adverse_media","risk"].includes(type)||!["pending","clear","match","review","error"].includes(status))return res.status(400).json({error:"Invalid screening"});const q=await db().query("insert into compliance_screenings(user_id,provider,screening_type,status,provider_reference,result_json) values($1,$2,$3,$4,$5,$6) returning *",[uid,String(req.body.provider||process.env.COMPLIANCE_PROVIDER||"manual"),type,status,req.body.providerReference||null,JSON.stringify(req.body.result||{})]);await audit(req.user.id,"compliance.screening_created","screening",q.rows[0].id,{type,status});res.status(201).json({screening:q.rows[0]})});
 
 installStageAKyc({app,db,auth,requireRole,audit});
+installSubscriptions({app,db,auth,requireRole,audit});
 
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
 function startBackgroundWorker(name,script,intervalMs){
@@ -341,7 +343,7 @@ async function start(){
       else if(walletColumnNames.has("wallet")&&!walletColumnNames.has("address")) await pool.query("alter table wallets rename column wallet to address");
       const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
       await pool.query(schema);
-      for(const file of ["whatsapp.sql","indexer.sql","transactions.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
+      for(const file of ["whatsapp.sql","indexer.sql","transactions.sql","subscriptions.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
       console.log("Database schema ready");
     }catch(e){
       console.error("Database initialization failed:",e.message);
