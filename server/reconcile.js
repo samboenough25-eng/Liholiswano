@@ -69,7 +69,7 @@ async function memberState(group,wallet){
  const c=new Contract(CONTRACT,PROTOCOL_ABI,rpc),m=await c.getMember(group,wallet);
  return {account:m[0],active:m[1],defaulted:m[2],wonThisRotation:m[3],contributedThisRound:m[4],bidSubmitted:m[5],bidBps:Number(m[6]),totalWins:Number(m[7]),totalContributed:safe(m[8]),totalReceived:safe(m[9])};
 }
-async function projectFinancialEvent(ev,runId,tokenCache){
+async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
  const args=ev.args||{}, group=args.groupId, member=args.member, key=`${CHAIN_ID}:${ev.tx_hash}:${ev.log_index}:${ev.event_name}`;
  if(!["ContributionPaid","RoundSettled"].includes(ev.event_name))return;
  const wallet=member||args.winner;
@@ -147,7 +147,7 @@ async function run(){
    for(const [key,name] of indexedFacts){if(!chainFacts.has(key))add(discrepancies,"indexer_orphan_event","chain_event",key,{presentOnChain:true},{eventName:name});}
    const facts=await pool.query("select tx_hash,log_index,event_name,args,block_number from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4 order by block_number,log_index",[CHAIN_ID,CONTRACT,from,safe]);
    const tokenCache=new Map();
-   for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache);}catch(e){add(discrepancies,"projection_error","chain_event",`${ev.tx_hash}:${ev.log_index}`,{projectable:true},{error:e.message});}}
+   for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`${ev.tx_hash}:${ev.log_index}`,{projectable:true},{error:e.message});}}
    for(const d of discrepancies)await pool.query("insert into reconciliation_discrepancies(run_id,severity,category,entity_type,entity_key,expected,actual) values($1,$2,$3,$4,$5,$6,$7)",
     [runId,d.severity,d.category,d.entityType,d.entityKey,JSON.stringify(d.expected),JSON.stringify(d.actual)]);
    const status=discrepancies.some(x=>x.severity==="critical")?"failed":discrepancies.length?"warning":"completed";
