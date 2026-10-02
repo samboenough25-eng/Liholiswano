@@ -45,7 +45,7 @@ async function safeBlock(){
 async function rangeLogs(from,to){
  const logs=[];
  for(let a=from;a<=to;a+=MAX_RANGE){
-  const b=Math.min(to,a+MAX_RANGE-1);
+  const b=Math.min(to,a+MAX_RANGE-1); console.log(JSON.stringify({service:"liholiswano-reconciliation",status:"scanning",fromBlock:a,toBlock:b}));
   let attempt=0;
   while(true){
    try{logs.push(...await rpc.getLogs({address:CONTRACT,fromBlock:a,toBlock:b}));break;}
@@ -105,7 +105,7 @@ async function run(){
  const lock=await pool.query("select pg_try_advisory_lock(hashtext('liholiswano-bnb-reconciliation')) locked");
  if(!lock.rows[0].locked)return {status:"already_running"};
  try{
-  const latest=await rpc.getBlockNumber(), safe=await safeBlock();
+  const latest=await rpc.getBlockNumber(), safe=await safeBlock(); console.log(JSON.stringify({service:"liholiswano-reconciliation",status:"started",latestBlock:latest,safeBlock:safe,startBlock:START}));
   const code=await rpc.getCode(CONTRACT);if(!code||code==="0x")throw new Error("Protocol contract has no code");
   const state=await pool.query("select last_processed_block,last_block_hash,contract_address from indexer_state where chain_id=$1",[CHAIN_ID]);
   const cursor=state.rowCount?Number(state.rows[0].last_processed_block):-1;
