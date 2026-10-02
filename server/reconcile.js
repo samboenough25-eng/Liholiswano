@@ -61,8 +61,9 @@ async function ensureSchema(){
 }
 
 async function safeBlock(){
- try{const b=await rpc.getBlock("finalized");if(b?.number!=null)return Number(b.number);}catch{}
- return Math.max(0,(await rpc.getBlockNumber())-CONFIRMATIONS);
+ const latest=await rpc.getBlockNumber();
+ try{const b=await rpc.getBlock("finalized");if(b?.number!=null)return Math.min(latest,Number(b.number));}catch{}
+ return Math.max(0,latest-CONFIRMATIONS);
 }
 async function loadCursor(){
  const r=await pool.query("select last_processed_block,last_block_hash,contract_address from reconciliation_state where chain_id=$1",[CHAIN_ID]);
