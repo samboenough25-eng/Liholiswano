@@ -30,7 +30,9 @@ const pool=process.env.DATABASE_URL?new Pool({
 
 app.set("trust proxy",1);
 app.use(helmet());
-app.use(cors({origin:process.env.CORS_ORIGIN?process.env.CORS_ORIGIN.split(",").map(s=>s.trim()):true,credentials:false}));
+const allowedOrigins=process.env.CORS_ORIGIN?process.env.CORS_ORIGIN.split(",").map(s=>s.trim()).filter(Boolean):[];
+if(process.env.NODE_ENV==="production"&&allowedOrigins.length===0) console.warn("CORS_ORIGIN is not configured in production; browser API access should be denied until an explicit origin is configured.");
+app.use(cors({origin:(origin,cb)=>{if(!origin)return cb(null,true);if(allowedOrigins.includes(origin))return cb(null,true);return cb(new Error("Origin not allowed"));},credentials:false}));
 app.use(express.json({limit:"100kb",verify:(req,res,buf)=>{if(req.path==="/api/whatsapp/webhook" || req.path==="/api/kyc/webhook")req.rawBody=Buffer.from(buf);}}));
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
@@ -100,11 +102,20 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
     const contact=await db().query("insert into whatsapp_contacts(phone,last_seen_at,updated_at) values($1,now(),now()) on conflict(phone) do update set last_seen_at=now(),updated_at=now() returning id,user_id",[phone]);
     const contactId=contact.rows[0].id;
     const existing=await db().query("select id from whatsapp_messages where provider_message_id=$1",[msg.messageId]);
-    if(existing.rowCount) return res.sendStatus(200);
-    await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
-    const reply=await handleCommand({phone,text:msg.text,db:db(),contactId});
-    const outbound=await sendText({to:phone,text:reply});
-    if(outbound.status==="sent") await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'sent')",[contactId,"local:"+msg.messageId,reply]);
+    let replyRow=null;
+    if(existing.rowCount){
+      const pending=await db().query("select id,body,status from whatsapp_messages where provider_message_id=$1 and direction='outbound' limit 1",["local:"+msg.messageId]);
+      if(pending.rowCount && pending.rows[0].status==="sent") return res.sendStatus(200);
+      replyRow=pending.rows[0]||null;
+    } else {
+      await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
+      const reply=await handleCommand({phone,text:msg.text,db:db(),contactId});
+      const inserted=await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'pending') returning id,body,status",[contactId,"local:"+msg.messageId,reply]);
+      replyRow=inserted.rows[0];
+    }
+    const outbound=await sendText({to:phone,text:replyRow.body});
+    if(outbound.status==="sent") await db().query("update whatsapp_messages set status='sent' where id=$1",[replyRow.id]);
+    else await db().query("update whatsapp_messages set status='failed' where id=$1",[replyRow.id]);
     res.sendStatus(200);
   }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(500);}
 });
@@ -121,7 +132,8 @@ app.get("/api/system/status",auth,requireRole(["admin","compliance","support"]),
 app.get("/health",async(req,res)=>{
   let database="not_configured";
   if(pool){try{await pool.query("select 1");database="ok";}catch{database="error";}}
-  res.json({service:"liholiswano-api",status:"ok",database,environment:process.env.NODE_ENV||"development"});
+  const ok=database==="ok";
+  res.status(ok?200:503).json({service:"liholiswano-api",status:ok?"ok":"degraded",database,environment:process.env.NODE_ENV||"development"});
 });
 
 const registerSchema=z.object({
