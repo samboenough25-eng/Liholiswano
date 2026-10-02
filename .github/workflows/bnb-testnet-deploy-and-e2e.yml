@@ -81,6 +81,7 @@ jobs:
             echo ""
             echo "- Protocol: \`$BNB_CONTRACT_ADDRESS\`"
             echo "- Test token: \`$TEST_TOKEN_CONTRACT\`"
+            echo "- Subscription vault: \`$SUBSCRIPTION_CONTRACT_ADDRESS\`"
             echo "- Chain ID: \`97\`"
             echo "- Pause test: passed"
             echo "- Full ROSCA settlement E2E: passed"
