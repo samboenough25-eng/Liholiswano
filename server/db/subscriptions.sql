@@ -22,6 +22,7 @@ create table if not exists subscription_payments (
   subscription_contract varchar(42) not null,
   subscription_key varchar(66) not null,
   customer_key varchar(66) not null,
+  wallet_address varchar(42) not null,
   status varchar(32) not null default 'prepared',
   tx_hash varchar(66),
   exchange_rate numeric(30,12),
