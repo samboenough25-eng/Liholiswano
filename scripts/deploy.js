@@ -25,8 +25,10 @@ async function main() {
   await mock.waitForDeployment();
 
   const Subscriptions = await ethers.getContractFactory("LiholiswanoSubscriptions");
-  const subscriptionTreasury = process.env.SUBSCRIPTION_TREASURY_ADDRESS || deployer.address;
-  if (!ethers.isAddress(subscriptionTreasury) || subscriptionTreasury === ethers.ZeroAddress) throw new Error("Invalid SUBSCRIPTION_TREASURY_ADDRESS");
+  const subscriptionTreasury = process.env.SUBSCRIPTION_TREASURY_ADDRESS;
+  if (!subscriptionTreasury || !ethers.isAddress(subscriptionTreasury) || subscriptionTreasury === ethers.ZeroAddress) {
+    throw new Error("SUBSCRIPTION_TREASURY_ADDRESS is required and must be a non-zero EVM address");
+  }
   const subscriptions = await Subscriptions.deploy(subscriptionTreasury, mock.target);
   await subscriptions.waitForDeployment();
 
