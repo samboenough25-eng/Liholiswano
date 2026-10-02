@@ -109,7 +109,7 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
       replyRow=pending.rows[0]||null;
     } else {
       await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
-      const reply=await handleCommand({phone,text:msg.text,db:db(),contactId});
+      const reply=await handleCommand({phone,text:msg.text,db:db(),contactId,messageId:msg.messageId});
       const inserted=await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'pending') returning id,body,status",[contactId,"local:"+msg.messageId,reply]);
       replyRow=inserted.rows[0];
     }
