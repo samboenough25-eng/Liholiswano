@@ -36,6 +36,15 @@ create table if not exists wallets (
   unique(user_id,id)
 );
 
+-- Backward-compatible wallet migrations for databases created by earlier versions.
+alter table wallets add column if not exists address varchar(42);
+alter table wallets add column if not exists chain_id bigint not null default 97;
+alter table wallets add column if not exists label varchar(80);
+alter table wallets add column if not exists is_primary boolean not null default false;
+alter table wallets add column if not exists verified_at timestamptz;
+create unique index if not exists uq_primary_wallet on wallets(user_id) where is_primary=true;
+create unique index if not exists uq_wallet_chain_address_lower on wallets(chain_id, lower(address));
+
 create table if not exists wallet_challenges (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references users(id) on delete cascade,
