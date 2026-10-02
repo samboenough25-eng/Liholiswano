@@ -273,6 +273,20 @@ app.post("/api/transactions/record",auth,async(req,res)=>{
       const expected=Number((request.request_json||{}).bidBps);
       if(!Number.isInteger(expected)||Number(parsed.args[1])!==expected)return res.status(400).json({error:"Bid amount does not match the prepared request"});
     }
+    const duplicate=await db().query("select id from transaction_requests where tx_hash=$1 and id<>$2 limit 1",[txHash,requestId]);
+    if(duplicate.rowCount)return res.status(409).json({error:"Transaction hash is already bound to another request"});
+    if(request.operation==="join"||request.operation==="contribute"){
+      const g=await p.call({to:request.contract_address,data:new Interface(["function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]).encodeFunctionData("getGroup",[request.onchain_group_id])}).catch(()=>null);
+      const groupIface=new Interface(["function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"]);
+      if(!g) return res.status(409).json({error:"Unable to verify on-chain group state"});
+      const gd=groupIface.decodeFunctionResult("getGroup",g);
+      const transferIface=new Interface(["event Transfer(address indexed from,address indexed to,uint256 value)"]);
+      let expectedAmount= request.operation==="join" ? BigInt(gd[5]) : BigInt(gd[4]);
+      const tokenAddress=String(gd[3]).toLowerCase();
+      let matched=false;
+      for(const log of receipt.logs){try{const pl=transferIface.parseLog(log);if(pl&&String(log.address).toLowerCase()===tokenAddress&&String(pl.args.from).toLowerCase()===request.wallet_address.toLowerCase()&&String(pl.args.to).toLowerCase()===request.contract_address.toLowerCase()&&BigInt(pl.args.value)===expectedAmount)matched=true;}catch{}}
+      if(!matched)return res.status(409).json({error:"Required token transfer does not match the prepared financial action"});
+    }
     if(Number(receipt.status)!==1){
       await db().query("update transaction_requests set status='failed',tx_hash=$2,error_message=$3,updated_at=now() where id=$1",[requestId,txHash,"On-chain transaction reverted"]);
       return res.status(409).json({error:"On-chain transaction failed",txHash});
@@ -285,8 +299,8 @@ app.post("/api/transactions/record",auth,async(req,res)=>{
 });
 
 app.get("/api/me/eligibility",auth,async(req,res)=>{
-  const restricted=req.user.kyc_status==="approved";
-  res.json({kycStatus:req.user.kyc_status,restrictedFinancialOperations:restricted,reason:restricted?null:"KYC approval is required for restricted financial operations"});
+  const restricted=req.user.kyc_status==="approved" && req.user.kyc_decision_source!=="manual_stage_a";
+  res.json({kycStatus:req.user.kyc_status,kycDecisionSource:req.user.kyc_decision_source||null,restrictedFinancialOperations:restricted,reason:restricted?null:"Production KYC/provider approval is required for restricted financial operations"});
 });
 
 
