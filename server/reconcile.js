@@ -99,21 +99,22 @@ async function verifyCursor(cursor){
  if(!b)throw new Error(`Reconciliation cursor block \${cursor.block} is unavailable`);
  if(b.hash&&!eq(b.hash,cursor.hash))throw new Error("Reconciliation cursor hash changed; explicit reorg recovery is required");
 }
-async function rangeLogs(from,to){
- const logs=[];
- for(let a=from;a<=to;a+=MAX_RANGE){
-  const b=Math.min(to,a+MAX_RANGE-1);
-  let attempt=0;
-  while(true){
-   try{logs.push(...await rpc.getLogs({address:CONTRACT,fromBlock:a,toBlock:b}));break;}
-   catch(e){
-    if(attempt++>=4)throw e;
-    await new Promise(r=>setTimeout(r,Math.min(8000,500*Math.pow(2,attempt))));
-   }
-  }
+async function fetchLogsAdaptive(fromBlock,toBlock){
+ if(fromBlock>toBlock)return [];
+ try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
+ catch(e){
+  const message=String(e?.shortMessage||e?.message||e);
+  const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
+  if(!retryable||fromBlock===toBlock)throw e;
+  const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
+  await new Promise(r=>setTimeout(r,1000));
+  return (await fetchLogsAdaptive(fromBlock,mid)).concat(await fetchLogsAdaptive(mid+1,toBlock));
  }
- return logs;
 }
+async function rangeLogs(from,to){
+ return fetchLogsAdaptive(from,to);
+}
+
 async function tokenInfo(address,cache){
  const key=address.toLowerCase(); if(cache.has(key))return cache.get(key);
  const c=new Contract(address,ERC20,rpc);
