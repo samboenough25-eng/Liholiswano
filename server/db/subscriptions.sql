@@ -36,6 +36,37 @@ create table if not exists subscription_payments (
   unique(tx_hash)
 );
 
+-- Additive compatibility migrations for pre-subscription schemas.
+alter table subscription_accounts add column if not exists currency char(1);
+alter table subscription_accounts add column if not exists monthly_fiat_minor integer default 500;
+alter table subscription_accounts add column if not exists active boolean default true;
+alter table subscription_accounts add column if not exists next_due_date date;
+alter table subscription_accounts add column if not exists created_at timestamptz default now();
+alter table subscription_accounts add column if not exists updated_at timestamptz default now();
+
+alter table subscription_payments add column if not exists period_start date;
+alter table subscription_payments add column if not exists period_key varchar(7);
+alter table subscription_payments add column if not exists currency char(1);
+alter table subscription_payments add column if not exists fiat_amount_minor integer default 500;
+alter table subscription_payments add column if not exists token_address varchar(42);
+alter table subscription_payments add column if not exists token_amount_base_units numeric(78,0);
+alter table subscription_payments add column if not exists token_decimals integer default 6;
+alter table subscription_payments add column if not exists chain_id bigint default 97;
+alter table subscription_payments add column if not exists subscription_contract varchar(42);
+alter table subscription_payments add column if not exists subscription_key varchar(66);
+alter table subscription_payments add column if not exists customer_key varchar(66);
+alter table subscription_payments add column if not exists wallet_address varchar(42);
+alter table subscription_payments add column if not exists status varchar(32) default 'prepared';
+alter table subscription_payments add column if not exists tx_hash varchar(66);
+alter table subscription_payments add column if not exists exchange_rate numeric(30,12);
+alter table subscription_payments add column if not exists rate_source varchar(255);
+alter table subscription_payments add column if not exists prepared_at timestamptz default now();
+alter table subscription_payments add column if not exists submitted_at timestamptz;
+alter table subscription_payments add column if not exists confirmed_at timestamptz;
+alter table subscription_payments add column if not exists error_message text;
+alter table subscription_payments add column if not exists created_at timestamptz default now();
+alter table subscription_payments add column if not exists updated_at timestamptz default now();
+
 create index if not exists idx_subscription_payments_user on subscription_payments(user_id, period_start desc);
 create index if not exists idx_subscription_payments_status on subscription_payments(status);
 create index if not exists idx_subscription_payments_due on subscription_payments(status, period_start);
