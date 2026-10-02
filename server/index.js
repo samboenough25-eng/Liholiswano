@@ -124,11 +124,13 @@ app.post("/api/auth/register",async(req,res)=>{
   try{
     const body=registerSchema.parse(req.body);
     const email=body.email.toLowerCase();
+    const normalizedPhone=body.phone?normalizePhone(body.phone):null;
+    if(body.phone&&!normalizedPhone)return res.status(400).json({error:"Invalid phone number"});
     if(process.env.EMAIL_VERIFICATION_REQUIRED==="true" && process.env.EMAIL_DEV_MODE!=="true" && (!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM)) return res.status(503).json({error:"Email verification is required but the email provider is not configured"});
     const passwordHash=await bcrypt.hash(body.password,12);
     const r=await db().query(
       "insert into users(email,password_hash,country,phone) values($1,$2,$3,$4) returning id,email,role,status,country,phone,kyc_status",
-      [email,passwordHash,body.country,body.phone||null]
+      [email,passwordHash,body.country,normalizedPhone]
     );
     const user=r.rows[0];
     await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country})]);
