@@ -174,6 +174,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
         "update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=now(),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning *",
         [paymentId,txHash]
       );
+      await db().query("update subscription_accounts set next_due_date=(date_trunc('month', $2::date)+interval '1 month')::date,updated_at=now() where user_id=$1",[req.user.id,payment.period_start]);
       await db().query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed',$2)",[paymentId,JSON.stringify({txHash,explorer:explorerTx(txHash)})]);
       await audit(req.user.id,"subscription.payment_confirmed","subscription_payment",paymentId,{txHash,period:payment.period_key});
       res.json({ payment: u.rows[0], explorer: explorerTx(txHash) });
@@ -223,6 +224,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
       for(const log of receipt.logs){try{const parsed=iface.parseLog(log);if(parsed&&parsed.name==="SubscriptionPaid"&&parsed.args.subscriptionKey.toLowerCase()===payment.subscription_key.toLowerCase()&&parsed.args.customerKey.toLowerCase()===payment.customer_key.toLowerCase()&&parsed.args.payer.toLowerCase()===tx.from.toLowerCase()&&parsed.args.token.toLowerCase()===payment.token_address.toLowerCase()&&parsed.args.amount===BigInt(payment.token_amount_base_units)&&Number(parsed.args.periodStart)===Math.floor(new Date(payment.period_start).getTime()/1000))matched=true;}catch{}}
       if(!matched)throw new Error("Confirmed transaction does not contain the expected subscription event");
       const u=await client.query("update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=now(),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning *",[payment.payment_id,txHash]);
+      await client.query("update subscription_accounts set next_due_date=(date_trunc('month', $2::date)+interval '1 month')::date,updated_at=now() where user_id=$1",[payment.user_id,payment.period_start]);
       await client.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed',$2)",[payment.payment_id,JSON.stringify({txHash,source:"whatsapp_authorization"})]);
       await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.authorization_id]);
       await client.query("commit");
