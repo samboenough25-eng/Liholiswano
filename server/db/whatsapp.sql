@@ -27,3 +27,16 @@ create table if not exists whatsapp_messages (
 );
 create index if not exists idx_whatsapp_contacts_user on whatsapp_contacts(user_id);
 create index if not exists idx_whatsapp_messages_contact_created on whatsapp_messages(contact_id,created_at desc);
+
+
+create table if not exists whatsapp_link_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  phone varchar(30) not null,
+  token_hash varchar(128) not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_whatsapp_link_tokens_user on whatsapp_link_tokens(user_id,created_at desc);
+create index if not exists idx_whatsapp_link_tokens_phone on whatsapp_link_tokens(phone,created_at desc);
