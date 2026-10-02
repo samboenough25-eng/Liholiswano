@@ -1,49 +1,36 @@
 # Liholiswano BNB Smart Chain deployment
 
-This is the active deployment guide for the bnb-app-complete branch.
+This is the active deployment guide for the `bnb-app-complete` branch.
 
 ## Network
 
-Current target:
 - BNB Smart Chain Testnet
 - Chain ID 97
 - Native gas token: tBNB
 
-## 1. Dedicated deployment wallet
-
-Create a dedicated BNB Testnet deployment wallet and fund it with tBNB.
-
-Do not use a production wallet. Never commit or share the private key.
-
-For GitHub Actions, store the deployment key only as the repository secret DEPLOYER_PRIVATE_KEY.
-
-## 2. Local validation
+## Validation
 
 Run:
 
 ```bash
 npm install
-npm run compile
-npm test
-npm run e2e:local
-npm run validate:web
-npm run api:check
+npm run check:all
 ```
 
-All checks should pass before deployment.
+The same core checks run in CI before deployment.
 
-## 3. Testnet deployment
+## Testnet deployment
 
-Use .github/workflows/deploy-bnb-testnet.yml.
+Use `.github/workflows/deploy-bnb-testnet.yml`.
 
 The workflow deploys:
 1. Liholiswano
 2. MockUSDT
 3. MockUSDT approval in Liholiswano
 
-The workflow records the public deployment addresses as an artifact.
+The workflow records public deployment addresses as an artifact.
 
-## 4. Verify the deployment
+## Verify the deployment
 
 Confirm:
 - chain ID is 97
@@ -53,11 +40,7 @@ Confirm:
 - the intended deployer is the contract owner
 - only Testnet assets are being used
 
-MockUSDT is a development token. It is not USDT or USDC and must never be treated as a production stablecoin.
-
-## 5. Configure the API
-
-Set:
+## Configure the API
 
 ```text
 BSC_CHAIN_ID=97
@@ -65,20 +48,19 @@ BSC_TESTNET_RPC_URL=<verified BNB Testnet RPC>
 BNB_CONTRACT_ADDRESS=<verified Liholiswano address>
 ```
 
-For the indexer:
+## Configure the indexer
 
 ```text
 INDEXER_CONFIRMATIONS=3
-INDEXER_MAX_BLOCK_RANGE=1000
+INDEXER_MAX_BLOCK_RANGE=100
 INDEXER_INITIAL_LOOKBACK=5000
 INDEXER_START_BLOCK=<deployment block>
+INDEXER_INTERVAL_MS=15000
 ```
 
-Using the deployment block is preferred.
+A small block range is intentional for the public BNB Testnet RPC. For production, use a dedicated RPC provider and a provider architecture suitable for continuous `eth_getLogs` traffic.
 
-## 6. Configure PostgreSQL
-
-Set DATABASE_URL.
+## Database
 
 Before indexing, verify that the database contains:
 - indexer_state
@@ -86,19 +68,7 @@ Before indexing, verify that the database contains:
 - reconciliation_runs
 - transaction_requests
 
-## 7. Run the indexer
-
-Run:
-
-```bash
-npm run indexer:check
-```
-
-The indexer validates the BSC chain, contract bytecode, cursor state and block hash. It records contract events and uses a PostgreSQL advisory lock to prevent concurrent indexers.
-
-## 8. Test the complete Testnet lifecycle
-
-Test:
+## Complete Testnet lifecycle
 
 1. Create a group.
 2. Join with at least three test wallets.
@@ -122,10 +92,6 @@ The backend must not manually override on-chain financial outcomes.
 
 Customer private keys must never be stored in the API.
 
-A wallet address alone does not prove wallet ownership. Financial signing must use the intended managed-wallet/provider verification mechanism.
+A wallet address alone does not prove wallet ownership. Financial signing must use the intended wallet/provider verification mechanism.
 
-## Testnet warning
-
-This guide is for Testnet only. Testnet success is not a security audit, regulatory approval, custody approval, or authorization to operate a real-money financial service.
-
-Mainnet requires separately verified production token addresses, wallet/custody controls, monitoring, security review, legal/compliance preparation, and controlled pilot validation.
+Testnet success is not a security audit, regulatory approval, custody approval, or authorization for real-money operation.
