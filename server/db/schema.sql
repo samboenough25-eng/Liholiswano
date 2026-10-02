@@ -44,6 +44,18 @@ alter table wallets add column if not exists is_primary boolean not null default
 alter table wallets add column if not exists verified_at timestamptz;
 create unique index if not exists uq_primary_wallet on wallets(user_id) where is_primary=true;
 
+create table if not exists wallet_challenges (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  chain_id bigint not null default 97,
+  address varchar(42) not null,
+  nonce varchar(128) not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_wallet_challenges_user on wallet_challenges(user_id,created_at desc);
+
 create unique index if not exists uq_primary_wallet on wallets(user_id) where is_primary=true;
 
 create table if not exists kyc_cases (
