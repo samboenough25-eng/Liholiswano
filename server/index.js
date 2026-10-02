@@ -32,6 +32,20 @@ app.use(express.json({limit:"100kb",verify:(req,res,buf)=>{if(req.path==="/api/w
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
+
+async function issueEmailVerification(userId,email){
+  const code=String(crypto.randomInt(0,1000000)).padStart(6,"0");
+  const tokenHash=crypto.createHash("sha256").update(code).digest("hex");
+  await db().query("update auth_tokens set used_at=now() where user_id=$1 and purpose='email_verify' and used_at is null",[userId]);
+  await db().query("insert into auth_tokens(user_id,token_hash,purpose,expires_at) values($1,$2,'email_verify',now()+interval '15 minutes')",[userId,tokenHash]);
+  if(process.env.EMAIL_DEV_MODE==="true") return {delivered:false,devCode:code};
+  if(!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM) throw new Error("Email verification provider is not configured");
+  const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json","Authorization:"Bearer "+process.env.RESEND_API_KEY},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[email],subject:"Liholiswano email verification code",html:"<p>Your Liholiswano verification code is:</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">"+code+"</p><p>This code expires in 15 minutes.</p>"})});
+  if(!response.ok) throw new Error("Email provider rejected the verification message");
+  const data=await response.json().catch(()=>({}));
+  return {delivered:true,providerReference:data.id||null};
+}
+
 async function audit(actorUserId,action,entityType,entityId,metadata={}){await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,$2,$3,$4,$5)",[actorUserId,action,entityType,entityId,JSON.stringify(metadata||{})]);}
 const requireRole=roles=>(req,res,next)=>roles.includes(req.user.role)?next():res.status(403).json({error:"Insufficient permissions"});
 function sign(user){if(!jwtSecret) throw new Error("JWT_SECRET is not configured.");return jwt.sign({sub:user.id,email:user.email,role:user.role},jwtSecret,{expiresIn:process.env.JWT_EXPIRES_IN||"2h",issuer:"liholiswano"});}
@@ -107,7 +121,9 @@ app.post("/api/auth/register",async(req,res)=>{
     );
     const user=r.rows[0];
     await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country})]);
-    res.status(201).json({user,token:sign(user)});
+    let verification=null;
+    if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email);
+    res.status(201).json({user,emailVerificationRequired:process.env.EMAIL_VERIFICATION_REQUIRED==="true",verification,token:process.env.EMAIL_VERIFICATION_REQUIRED==="true"&&!user.email_verified_at?null:sign(user)});
   }catch(e){
     if(e.name==="ZodError") return res.status(400).json({error:"Invalid registration data",details:e.issues.map(x=>x.path.join(".")+": "+x.message)});
     if(e.code==="23505") return res.status(409).json({error:"An account with that email already exists"});
@@ -115,6 +131,8 @@ app.post("/api/auth/register",async(req,res)=>{
   }
 });
 
+app.post("/api/auth/email-verification/request",auth,async(req,res)=>{try{const u=await db().query("select email,email_verified_at from users where id=$1",[req.user.id]);if(!u.rowCount)return res.status(404).json({error:"User not found"});if(u.rows[0].email_verified_at)return res.json({verified:true});const result=await issueEmailVerification(req.user.id,u.rows[0].email);res.json({verified:false,...result});}catch(e){console.error(e);res.status(503).json({error:"Unable to send email verification code"})}});
+app.post("/api/auth/email-verification/confirm",auth,async(req,res)=>{try{const code=String(req.body.code||"").trim();if(!/^\\d{6}$/.test(code))return res.status(400).json({error:"A 6-digit verification code is required"});const hash=crypto.createHash("sha256").update(code).digest("hex");const q=await db().query("select id from auth_tokens where user_id=$1 and purpose='email_verify' and token_hash=$2 and used_at is null and expires_at>now() order by created_at desc limit 1",[req.user.id,hash]);if(!q.rowCount)return res.status(400).json({error:"Invalid or expired verification code"});await db().query("update auth_tokens set used_at=now() where id=$1",[q.rows[0].id]);await db().query("update users set email_verified_at=now(),updated_at=now() where id=$1",[req.user.id]);await audit(req.user.id,"user.email_verified","user",req.user.id);res.json({verified:true});}catch(e){console.error(e);res.status(400).json({error:"Unable to verify email"})}});
 app.post("/api/auth/login",async(req,res)=>{
   try{
     const body=z.object({email:z.string().email(),password:z.string().min(1).max(128)}).parse(req.body);
@@ -123,6 +141,7 @@ app.post("/api/auth/login",async(req,res)=>{
     const user=r.rows[0];
     if(!(await bcrypt.compare(body.password,user.password_hash))) return res.status(401).json({error:"Invalid email or password"});
     if(user.status!=="active") return res.status(403).json({error:"Account is not active"});
+    if(process.env.EMAIL_VERIFICATION_REQUIRED==="true" && !user.email_verified_at) return res.status(403).json({error:"Email verification is required",code:"EMAIL_VERIFICATION_REQUIRED"});
     delete user.password_hash;
     await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id) values($1,'user.login','user',$1)",[user.id]);
     res.json({user,token:sign(user)});
