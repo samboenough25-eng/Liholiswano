@@ -6,6 +6,7 @@ const RPC = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet.bnbchain.org
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const CONTRACT = process.env.BNB_CONTRACT_ADDRESS || "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014";
 const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29";
+const SUBSCRIPTION = process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
 // Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
 // the test only needs enough tBNB for each temporary member's transactions.
 const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.00005");
@@ -34,6 +35,7 @@ const appAbi = [
   "function approvedToken(address) view returns (bool)",
   "function getMember(bytes32,address) view returns (address,bool,bool,bool,bool,bool,uint256,uint256,uint256,uint256)",
   "function protocolFeeBps() view returns (uint256)",
+  "function paused() view returns (bool)",
   "event GroupCreated(bytes32 indexed groupId,address indexed admin,address indexed token)",
   "event MemberJoined(bytes32 indexed groupId,address indexed member)",
   "event GroupLockedEvent(bytes32 indexed groupId,uint256 round,uint256 deadline)",
@@ -71,8 +73,19 @@ async function main() {
   if (appCode === "0x") throw new Error("BNB_CONTRACT_ADDRESS has no deployed code on BSC Testnet");
   if (tokenCode === "0x") throw new Error("TEST_TOKEN_CONTRACT has no deployed code on BSC Testnet");
 
+  if (!SUBSCRIPTION || !ethers.isAddress(SUBSCRIPTION)) throw new Error("SUBSCRIPTION_CONTRACT_ADDRESS is required for the fresh E2E");
   const token = new ethers.Contract(TOKEN, tokenAbi, owner);
   const app = new ethers.Contract(CONTRACT, appAbi, owner);
+  const subscriptions = new ethers.Contract(SUBSCRIPTION, [
+    "function paySubscription(bytes32,bytes32,uint256,uint256)",
+    "function paid(bytes32) view returns(bool)",
+    "function treasury() view returns(address)",
+    "function token() view returns(address)",
+    "function pause()",
+    "function unpause()",
+    "function paused() view returns(bool)",
+    "event SubscriptionPaid(bytes32 indexed subscriptionKey,bytes32 indexed customerKey,address indexed payer,address token,uint256 amount,uint256 periodStart)"
+  ], owner);
   if (!(await app.approvedToken(TOKEN))) {
     throw new Error("Test token is not allowlisted by the deployed Liholiswano contract");
   }
@@ -82,6 +95,7 @@ async function main() {
   console.log("DEPLOYER_BALANCE_TBNB=" + ethers.formatEther(balance));
   console.log("CONTRACT=" + CONTRACT);
   console.log("TOKEN=" + TOKEN);
+  console.log("SUBSCRIPTION=" + SUBSCRIPTION);
   console.log("MEMBER_GAS_FUND_TBNB=" + ethers.formatEther(MEMBER_GAS_FUND));
   console.log("OWNER_GAS_RESERVE_TBNB=" + ethers.formatEther(OWNER_GAS_RESERVE));
   console.log("REQUIRED_MINIMUM_TBNB=" + ethers.formatEther(requiredFunding));
@@ -179,6 +193,33 @@ async function main() {
   console.log("PAYOUT=" + ethers.formatUnits(payout, 6));
   console.log("EXPECTED_PAYOUT=" + ethers.formatUnits(expectedPayout, 6));
   console.log("PROTOCOL_FEE_BPS=" + feeBps.toString());
+  // Subscription vault E2E: a customer explicitly pays the configured test subscription
+  // amount to the separate treasury, independent of ROSCA escrow.
+  const subscriptionAmount = ethers.parseUnits(process.env.TESTNET_SUBSCRIPTION_AMOUNT || "5", 6);
+  const periodStart = BigInt(Math.floor(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) / 1000));
+  const customerKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-CUSTOMER:"+members[0].address));
+  const subscriptionKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-SUBSCRIPTION:"+members[0].address+":"+periodStart.toString()));
+  const subBefore = await token.balanceOf(owner.address);
+  const treasuryBefore = await token.balanceOf(await subscriptions.treasury());
+  await send("APPROVE_SUBSCRIPTION", token.connect(members[0]).approve(SUBSCRIPTION, subscriptionAmount));
+  await send("PAY_SUBSCRIPTION", subscriptions.connect(members[0]).paySubscription(subscriptionKey,customerKey,periodStart,subscriptionAmount));
+  if (!(await subscriptions.paid(subscriptionKey))) throw new Error("Subscription payment was not recorded");
+  const treasuryAfter = await token.balanceOf(await subscriptions.treasury());
+  if (treasuryAfter - treasuryBefore !== subscriptionAmount) throw new Error("Subscription treasury amount mismatch");
+  console.log("SUBSCRIPTION_E2E=PASS");
+  console.log("SUBSCRIPTION_AMOUNT="+ethers.formatUnits(subscriptionAmount,6));
+  console.log("SUBSCRIPTION_TREASURY="+await subscriptions.treasury());
+
+  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());
+  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");
+  let subBlocked=false;
+  try { await subscriptions.connect(members[1]).paySubscription(ethers.keccak256(ethers.toUtf8Bytes("E2E-SECOND")),customerKey,periodStart,subscriptionAmount); }
+  catch(e){ subBlocked=true; }
+  if(!subBlocked) throw new Error("Paused subscription vault accepted payment");
+  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());
+  if(await subscriptions.paused()) throw new Error("Subscription vault unpause failed");
+  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
+
   console.log("TESTNET_E2E=PASS");
 }
 
