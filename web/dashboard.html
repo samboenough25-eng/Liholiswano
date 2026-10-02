@@ -7,7 +7,7 @@
 <section class="card"><h2>ROSCA financial actions</h2><p class="muted">These actions use your connected verified wallet. Liholiswano prepares the request server-side, then your wallet signs the on-chain transaction. The WhatsApp channel can start the request, but it never receives custody of funds.</p><input id="actionGroup" placeholder="On-chain group ID (0x... bytes32)"><input id="bidBps" placeholder="Bid % e.g. 5" type="number" min="0" step="0.01"><p><button id="joinOnchain">Join ROSCA</button><button id="contributeOnchain">Contribute</button><button id="bidOnchain">Submit bid</button></p><div id="financialStatus" class="status">No financial action started.</div></section><section class="card"><h2>Savings groups</h2><button id="groups">Refresh groups</button><div id="groupsOut" class="status">—</div></section>
 <section class="card"><h2>Transactions & activity</h2><button id="activity">Refresh activity</button><div id="activityOut" class="status">—</div></section>
 <section class="card"><h2>Support</h2><input id="subject" placeholder="Subject"><br><br><input id="description" placeholder="How can we help?"><p><button id="ticket">Create ticket</button></p></section>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script>window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script src="./config.js"></script><script>const C=window.LIHOLISWANO_CONFIG;window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
 const API=(window.LIHOLISWANO_API||location.origin), $=x=>document.getElementById(x);let token=localStorage.getItem("lhs_token")||"";
 async function api(path,opt={}){opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
 async function refresh(){if(!token)return;try{const [p,k,w,g,t,l,n]=await Promise.all([api("/api/profile"),api("/api/kyc"),api("/api/wallets"),api("/api/groups"),api("/api/transactions"),api("/api/ledger"),api("/api/notifications")]);$("profile").textContent=JSON.stringify(p.profile,null,2);$("kyc").textContent=JSON.stringify(k,null,2);$("wallets").textContent=JSON.stringify(w.wallets,null,2);$("groupsOut").textContent=JSON.stringify(g.groups,null,2);$("activityOut").textContent=JSON.stringify({transactions:t.transactions,ledger:l.entries,notifications:n.notifications},null,2);$("status").textContent="Signed in."; }catch(e){$("status").textContent=e.message}}
@@ -16,6 +16,13 @@ $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"PO
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
 $("groups").onclick=refresh;$("activity").onclick=refresh;
 $("verifyWallet").onclick=async()=>{try{if(!token)throw Error("Sign in first.");if(!window.ethereum)throw Error("No EVM wallet detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");const provider=new ethers.BrowserProvider(window.ethereum);const signer=await provider.getSigner();const address=await signer.getAddress();const network=await provider.getNetwork();if(network.chainId!==97n)throw Error("Switch the wallet to BNB Smart Chain Testnet.");const challenge=await api("/api/wallets/challenge",{method:"POST",body:JSON.stringify({address,chainId:97})});const signature=await signer.signMessage(challenge.message);const linked=await api("/api/wallets",{method:"POST",body:JSON.stringify({address,chainId:97,message:challenge.message,signature,primary:true,label:"BNB Testnet wallet"})});$("walletVerify").textContent=JSON.stringify(linked,null,2);await refresh()}catch(e){$("walletVerify").textContent=e.message}};
+let provider=null,signer=null,address=null;
+const FIN_ABI=["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)"];
+const TOKEN_ABI=["function approve(address,uint256) returns(bool)","function allowance(address,address) view returns(uint256)","function decimals() view returns(uint8)"];
+function protocol(){if(!signer)throw Error("Connect an EVM wallet first.");return new ethers.Contract(C.contractAddress,FIN_ABI,signer)}
+function tokenContract(){if(!signer)throw Error("Connect an EVM wallet first.");return new ethers.Contract(C.tokenAddress,TOKEN_ABI,signer)}
+async function connect(){if(!window.ethereum)throw Error("No EVM wallet provider detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");provider=new ethers.BrowserProvider(window.ethereum);signer=await provider.getSigner();address=await signer.getAddress();await ensureChain()}
+async function ensureChain(){if(!provider)throw Error("Connect your wallet first.");const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId))throw Error("Switch the wallet to BNB Smart Chain Testnet.")}
 async function prepareAndSign(operation){
   if(!token)throw Error("Sign in first.");
   if(!signer)await connect();
@@ -27,7 +34,7 @@ async function prepareAndSign(operation){
   const p=protocol();
   let tx;
   if(operation==="join")tx=await p.joinGroup(gid);
-  else if(operation==="contribute")tx=await p.contribute(gid);
+  else if(operation==="contribute"){const w=await api("/api/wallets");const wallet=w.wallets.find(x=>x.is_primary&&x.verified_at);if(!wallet)throw Error("Verify a primary wallet first.");const g=await (new ethers.Contract(C.contractAddress,["function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],provider)).getGroup(gid);const t=tokenContract();const allowance=await t.allowance(address,C.contractAddress);if(allowance<g[4]){const aTx=await t.approve(C.contractAddress,g[4]);$("financialStatus").textContent="Approve contribution in your wallet…";await aTx.wait();}tx=await p.contribute(gid);}
   else {const bid=Number($("bidBps").value);if(!Number.isFinite(bid)||bid<0)throw Error("Enter a valid bid percentage.");tx=await p.submitBid(gid,Math.round(bid*100));}
   $("financialStatus").textContent="Transaction submitted: "+tx.hash+"\\nWaiting for confirmation…";
   const receipt=await tx.wait();
