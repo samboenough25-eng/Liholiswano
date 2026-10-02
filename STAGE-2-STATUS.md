@@ -1,47 +1,72 @@
 # Stage 2 status — BNB Smart Chain Testnet
 
-## Completed in code
+## Verified completed
 
-- Solidity ROSCA protocol contract
-- automatic full-group locking
-- contract-enforced round deadlines
-- permissionless deadline/default/settlement triggering
-- per-group escrow accounting
-- reentrancy protection
-- exact standard-token transfer checks
-- two-step ownership transfer
-- Hardhat unit tests
-- local three-wallet E2E
-- browser static validation
-- BNB Testnet deployment workflow
-- PostgreSQL-backed blockchain event indexer
-- persistent indexer cursor and block-hash validation
-- idempotent event ingestion
-- advisory-lock protection against concurrent indexers
-- BNB network and deployed-code validation
-- BNB API foundation
-- transaction-request idempotency foundation
-- WhatsApp customer-channel foundation
+- Solidity ROSCA protocol contract.
+- Automatic full-group locking.
+- Contract-enforced round deadlines.
+- Permissionless deadline/default/settlement triggering.
+- Per-group escrow accounting.
+- Reentrancy protection.
+- Exact standard-token transfer checks.
+- Two-step ownership transfer.
+- Hardhat unit tests.
+- Local three-wallet E2E.
+- Browser static validation.
+- BNB Testnet deployment workflow.
+- PostgreSQL-backed blockchain event indexer.
+- Persistent indexer cursor and block-hash validation.
+- Idempotent event ingestion.
+- Advisory-lock protection against concurrent indexers.
+- BNB network and deployed-code validation.
+- BNB API foundation.
+- Transaction-request idempotency foundation.
+- WhatsApp customer-channel foundation.
+- BNB GitHub CI currently passes compile, tests, local E2E and web validation.
 
-## Current live blockers
+## Current Testnet deployment
 
-The complete BNB Testnet financial cycle has not yet been live-verified.
+- BNB Smart Chain Testnet: chain ID 97.
+- Liholiswano: `0xe9b104260c940fAE26a73e4E9c952fD18fFd2014`
+- MockUSDT: `0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29`
 
-Required next steps:
+MockUSDT is a development token only.
 
-1. Deploy Liholiswano to BNB Testnet.
-2. Verify the public contract address and deployment block.
-3. Configure the Render API with DATABASE_URL, JWT_SECRET and BNB contract configuration.
-4. Configure the indexer.
-5. Run the indexer against the deployed contract.
-6. Verify blockchain events in PostgreSQL.
-7. Configure the intended managed-wallet provider.
-8. Execute a real three-wallet Testnet ROSCA lifecycle.
-9. Reconcile on-chain events against database transaction records.
-10. Harden keeper automation and operational monitoring.
+## Current live gate
 
-## Security
+The complete three-wallet BNB Testnet financial cycle has **not yet been
+verified end-to-end**.
 
-The active BNB contract remains unaudited. Automated tests are evidence of tested behaviour, not a security audit or approval for Mainnet or real-money operation.
+The controlled E2E workflow was initially blocked by a YAML parsing defect;
+that workflow has now been corrected. The next execution reached the actual
+Testnet cycle and failed for a real external prerequisite: the deployer wallet
+had only about 0.000268 tBNB while the test attempted to fund three temporary
+wallets with 0.01 tBNB each.
 
-Testnet MockUSDT is a development token only.
+The E2E code has now also been corrected to:
+
+- fail early with a precise minimum-balance message;
+- use a smaller configurable temporary-member gas allocation;
+- verify deployed contract and token bytecode;
+- verify the test token is allowlisted;
+- calculate the expected payout from the deployed protocol fee;
+- correctly check the `totalWins` tuple field.
+
+Therefore the remaining E2E blocker is **testnet gas funding**, not the YAML
+workflow parser.
+
+## Remaining production work
+
+1. Complete the live Testnet ROSCA E2E.
+2. Reconcile on-chain events with PostgreSQL.
+3. Verify indexer restart/idempotency and reorg recovery.
+4. Connect the managed-wallet provider.
+5. Connect WhatsApp Business.
+6. Connect biometric KYC and AML/compliance providers.
+7. Harden keeper automation and transaction monitoring.
+8. Complete independent security/audit work.
+9. Configure a real production stablecoin only after the above gates.
+10. Complete Botswana/Eswatini compliance and controlled launch preparation.
+
+Testnet CI success is not a security audit or authorization for real-money
+operation.
