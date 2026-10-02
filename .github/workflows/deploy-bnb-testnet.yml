@@ -1,42 +1,67 @@
 name: Deploy Liholiswano to BNB Testnet
+
 on:
   workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-      - run: npm install
-      - run: npm run compile
-      - run: npm test
-      - run: npm run e2e:local
-      - run: npm run validate:web
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Contract tests
+        run: npm test
+
+      - name: Local ROSCA E2E
+        run: npm run e2e:local
+
+      - name: Web validation
+        run: npm run validate:web
+
       - name: Validate deployment secret
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
         run: |
-          if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then echo "Missing DEPLOYER_PRIVATE_KEY repository secret"; exit 1; fi
+          test -n "$DEPLOYER_PRIVATE_KEY" || {
+            echo "Missing DEPLOYER_PRIVATE_KEY repository secret"
+            exit 1
+          }
+
       - name: Deploy protocol and test token
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
         run: npm run deploy:testnet | tee deployment.txt
+
       - name: Validate deployment output
         run: |
-          grep -q '^LIHOLISWANO_CONTRACT=0x' deployment.txt
-          grep -q '^TEST_TOKEN_CONTRACT=0x' deployment.txt
+          grep -Eq '^LIHOLISWANO_CONTRACT=0x[0-9a-fA-F]{40}$' deployment.txt
+          grep -Eq '^TEST_TOKEN_CONTRACT=0x[0-9a-fA-F]{40}$' deployment.txt
           grep -q '^CHAIN_ID=97$' deployment.txt
           grep -q '^TOKEN_APPROVED=true$' deployment.txt
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload deployment record
+        uses: actions/upload-artifact@v4
         with:
           name: bnb-testnet-deployment
           path: deployment.txt
           retention-days: 30
+
       - name: Print deployment
         run: cat deployment.txt
