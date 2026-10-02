@@ -4,7 +4,7 @@
 <body><main class="wrap"><h1>Liholiswano Customer Dashboard</h1><p class="muted">Account, KYC, wallet, savings groups, transactions and support.</p>
 <p><a href="./register.html">Create a new customer account</a></p><section class="card"><h2>Sign in</h2><div class="grid"><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"></div><p><button id="login">Sign in</button> <button id="logout">Sign out</button></p><div id="status" class="status">Not signed in.</div></section>
 <section class="card"><h2>WhatsApp</h2><p class="muted">Link and verify the WhatsApp number you control. Liholiswano will send a one-time code; do not share that code with anyone.</p><input id="waPhone" placeholder="+267... or +268..."><button id="waLink">Send WhatsApp linking code</button><div id="waStatus" class="status">Not linked through this dashboard session.</div></section><section class="card"><h2>Wallet ownership</h2><p class="muted">Connect your BNB Testnet wallet and sign a verification message. The signature proves wallet control; it does not authorize a transaction.</p><button id="verifyWallet">Verify connected wallet</button><div id="walletVerify" class="status">Not verified in this session.</div></section><section class="grid"><div class="card"><h2>Profile</h2><div id="profile" class="status">—</div></div><div class="card"><h2>KYC</h2><div id="kyc" class="status">—</div></div><div class="card"><h2>Wallets</h2><div id="wallets" class="status">—</div></div></section>
-<section class="card"><h2>Savings groups</h2><button id="groups">Refresh groups</button><div id="groupsOut" class="status">—</div></section>
+<section class="card"><h2>ROSCA financial actions</h2><p class="muted">These actions use your connected verified wallet. Liholiswano prepares the request server-side, then your wallet signs the on-chain transaction. The WhatsApp channel can start the request, but it never receives custody of funds.</p><input id="actionGroup" placeholder="On-chain group ID (0x... bytes32)"><input id="bidBps" placeholder="Bid % e.g. 5" type="number" min="0" step="0.01"><p><button id="joinOnchain">Join ROSCA</button><button id="contributeOnchain">Contribute</button><button id="bidOnchain">Submit bid</button></p><div id="financialStatus" class="status">No financial action started.</div></section><section class="card"><h2>Savings groups</h2><button id="groups">Refresh groups</button><div id="groupsOut" class="status">—</div></section>
 <section class="card"><h2>Transactions & activity</h2><button id="activity">Refresh activity</button><div id="activityOut" class="status">—</div></section>
 <section class="card"><h2>Support</h2><input id="subject" placeholder="Subject"><br><br><input id="description" placeholder="How can we help?"><p><button id="ticket">Create ticket</button></p></section>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script>window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
@@ -16,6 +16,28 @@ $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"PO
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
 $("groups").onclick=refresh;$("activity").onclick=refresh;
 $("verifyWallet").onclick=async()=>{try{if(!token)throw Error("Sign in first.");if(!window.ethereum)throw Error("No EVM wallet detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");const provider=new ethers.BrowserProvider(window.ethereum);const signer=await provider.getSigner();const address=await signer.getAddress();const network=await provider.getNetwork();if(network.chainId!==97n)throw Error("Switch the wallet to BNB Smart Chain Testnet.");const challenge=await api("/api/wallets/challenge",{method:"POST",body:JSON.stringify({address,chainId:97})});const signature=await signer.signMessage(challenge.message);const linked=await api("/api/wallets",{method:"POST",body:JSON.stringify({address,chainId:97,message:challenge.message,signature,primary:true,label:"BNB Testnet wallet"})});$("walletVerify").textContent=JSON.stringify(linked,null,2);await refresh()}catch(e){$("walletVerify").textContent=e.message}};
+async function prepareAndSign(operation){
+  if(!token)throw Error("Sign in first.");
+  if(!signer)await connect();
+  await ensureChain();
+  const gid=$("actionGroup").value.trim();
+  if(!/^0x[a-fA-F0-9]{64}$/.test(gid))throw Error("Enter the 32-byte on-chain group ID.");
+  const key=operation+"-"+gid+"-"+Date.now()+"-"+Math.random().toString(16).slice(2);
+  const d=await api("/api/transactions/prepare",{method:"POST",headers:{"Idempotency-Key":key},body:JSON.stringify({operation,onchainGroupId:gid,idempotencyKey:key})});
+  const p=protocol();
+  let tx;
+  if(operation==="join")tx=await p.joinGroup(gid);
+  else if(operation==="contribute")tx=await p.contribute(gid);
+  else {const bid=Number($("bidBps").value);if(!Number.isFinite(bid)||bid<0)throw Error("Enter a valid bid percentage.");tx=await p.submitBid(gid,Math.round(bid*100));}
+  $("financialStatus").textContent="Transaction submitted: "+tx.hash+"\\nWaiting for confirmation…";
+  const receipt=await tx.wait();
+  const recorded=await api("/api/transactions/record",{method:"POST",body:JSON.stringify({requestId:d.request.id,txHash:receipt.hash})});
+  $("financialStatus").textContent="Transaction confirmed.\\n"+JSON.stringify(recorded.request,null,2);
+  await refresh();
+}
+$("joinOnchain").onclick=async()=>{try{await prepareAndSign("join")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
+$("contributeOnchain").onclick=async()=>{try{await prepareAndSign("contribute")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
+$("bidOnchain").onclick=async()=>{try{await prepareAndSign("bid")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
 $("ticket").onclick=async()=>{try{await api("/api/support/tickets",{method:"POST",body:JSON.stringify({subject:$("subject").value,description:$("description").value})});$("subject").value="";$("description").value="";$("status").textContent="Support ticket created."}catch(e){$("status").textContent=e.message}};
 refresh();
 </script></main></body></html>
