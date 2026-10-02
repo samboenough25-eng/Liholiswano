@@ -232,3 +232,32 @@ create table if not exists reconciliation_projection (
 );
 create index if not exists idx_recon_projection_group on reconciliation_projection(group_id);
 create index if not exists idx_recon_projection_user on reconciliation_projection(user_id,created_at desc);
+
+-- Stage 3 reconciliation cursor/state. This is independent from the event indexer cursor.
+create table if not exists reconciliation_state (
+  chain_id bigint primary key,
+  contract_address varchar(42) not null,
+  last_processed_block bigint not null default -1,
+  last_block_hash varchar(66),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists reconciliation_member_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid references reconciliation_runs(id) on delete cascade,
+  group_id varchar(66) not null,
+  wallet_address varchar(42) not null,
+  active boolean not null,
+  defaulted boolean not null,
+  won_this_rotation boolean not null,
+  contributed_this_round boolean not null,
+  bid_submitted boolean not null,
+  bid_bps bigint not null,
+  total_wins bigint not null,
+  total_contributed numeric(78,0) not null,
+  total_received numeric(78,0) not null,
+  block_number bigint not null,
+  created_at timestamptz not null default now(),
+  unique(run_id,group_id,wallet_address)
+);
+create index if not exists idx_recon_member_snapshot_group on reconciliation_member_snapshots(group_id,created_at desc);
