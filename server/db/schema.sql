@@ -272,35 +272,35 @@ create index if not exists idx_wallet_challenges_expiry on wallet_challenges(exp
 -- Existing deployments may already contain a KYC document/event table from an earlier build.
 -- CREATE IF NOT EXISTS preserves it, while these additive columns make the Stage-A shape compatible.
 
-alter table kyc_identity_submissions add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
-alter table kyc_identity_submissions add column if not exists user_id uuid references users(id) on delete cascade;
-alter table kyc_identity_submissions add column if not exists legal_first_name varchar(100);
-alter table kyc_identity_submissions add column if not exists legal_last_name varchar(100);
-alter table kyc_identity_submissions add column if not exists date_of_birth date;
-alter table kyc_identity_submissions add column if not exists document_type varchar(32);
-alter table kyc_identity_submissions add column if not exists document_country char(2);
-alter table kyc_identity_submissions add column if not exists document_last4 varchar(4);
-alter table kyc_identity_submissions add column if not exists residential_city varchar(100);
-alter table kyc_identity_submissions add column if not exists consent_version varchar(32);
-alter table kyc_identity_submissions add column if not exists consented_at timestamptz;
-alter table kyc_identity_submissions add column if not exists created_at timestamptz default now();
-alter table kyc_documents add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
-alter table kyc_documents add column if not exists user_id uuid references users(id) on delete cascade;
-alter table kyc_documents add column if not exists document_type varchar(32);
-alter table kyc_documents add column if not exists original_filename varchar(255);
-alter table kyc_documents add column if not exists content_type varchar(100);
-alter table kyc_documents add column if not exists byte_size integer;
-alter table kyc_documents add column if not exists sha256 varchar(64);
-alter table kyc_documents add column if not exists storage_status varchar(32) default 'metadata_only';
-alter table kyc_documents add column if not exists provider_reference varchar(255);
-alter table kyc_documents add column if not exists created_at timestamptz default now();
-alter table kyc_events add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
-alter table kyc_events add column if not exists actor_user_id uuid references users(id) on delete set null;
-alter table kyc_events add column if not exists event_type varchar(64);
-alter table kyc_events add column if not exists from_status varchar(32);
-alter table kyc_events add column if not exists to_status varchar(32);
-alter table kyc_events add column if not exists details jsonb default '{}'::jsonb;
-alter table kyc_events add column if not exists created_at timestamptz default now();
+alter table if exists kyc_identity_submissions add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
+alter table if exists kyc_identity_submissions add column if not exists user_id uuid references users(id) on delete cascade;
+alter table if exists kyc_identity_submissions add column if not exists legal_first_name varchar(100);
+alter table if exists kyc_identity_submissions add column if not exists legal_last_name varchar(100);
+alter table if exists kyc_identity_submissions add column if not exists date_of_birth date;
+alter table if exists kyc_identity_submissions add column if not exists document_type varchar(32);
+alter table if exists kyc_identity_submissions add column if not exists document_country char(2);
+alter table if exists kyc_identity_submissions add column if not exists document_last4 varchar(4);
+alter table if exists kyc_identity_submissions add column if not exists residential_city varchar(100);
+alter table if exists kyc_identity_submissions add column if not exists consent_version varchar(32);
+alter table if exists kyc_identity_submissions add column if not exists consented_at timestamptz;
+alter table if exists kyc_identity_submissions add column if not exists created_at timestamptz default now();
+alter table if exists kyc_documents add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
+alter table if exists kyc_documents add column if not exists user_id uuid references users(id) on delete cascade;
+alter table if exists kyc_documents add column if not exists document_type varchar(32);
+alter table if exists kyc_documents add column if not exists original_filename varchar(255);
+alter table if exists kyc_documents add column if not exists content_type varchar(100);
+alter table if exists kyc_documents add column if not exists byte_size integer;
+alter table if exists kyc_documents add column if not exists sha256 varchar(64);
+alter table if exists kyc_documents add column if not exists storage_status varchar(32) default 'metadata_only';
+alter table if exists kyc_documents add column if not exists provider_reference varchar(255);
+alter table if exists kyc_documents add column if not exists created_at timestamptz default now();
+alter table if exists kyc_events add column if not exists case_id uuid references kyc_cases(id) on delete cascade;
+alter table if exists kyc_events add column if not exists actor_user_id uuid references users(id) on delete set null;
+alter table if exists kyc_events add column if not exists event_type varchar(64);
+alter table if exists kyc_events add column if not exists from_status varchar(32);
+alter table if exists kyc_events add column if not exists to_status varchar(32);
+alter table if exists kyc_events add column if not exists details jsonb default '{}'::jsonb;
+alter table if exists kyc_events add column if not exists created_at timestamptz default now();
 
 create table if not exists kyc_identity_submissions (
   id uuid primary key default gen_random_uuid(),
