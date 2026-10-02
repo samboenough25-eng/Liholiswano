@@ -143,7 +143,8 @@ app.post("/api/auth/register",async(req,res)=>{
       [email,passwordHash,body.country,normalizedPhone]
     );
     const user=r.rows[0];
-    await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country})]);
+    await db().query("insert into subscription_accounts(user_id,currency,monthly_fiat_minor,active,next_due_date) values($1,$2,500,true,date_trunc('month',now())::date) on conflict(user_id) do nothing",[user.id,user.country==="BW"?"P":"E"]);
+    await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country,subscription:"P/E5 monthly"})]);
     let verification=null;
     if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email);
     res.status(201).json({user,emailVerificationRequired:process.env.EMAIL_VERIFICATION_REQUIRED==="true",verification,token:sign(user)});
