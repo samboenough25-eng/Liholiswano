@@ -3,7 +3,7 @@ const {groupState,memberState}=require("./blockchain");
 const {assertAddress}=require("./wallet");
 
 async function userByPhone(db,phone){
-  const q=await db.query("select id,email,country,phone,kyc_status from users where phone=$1",[phone]);
+  const q=await db.query("select id,email,country,phone,phone_verified_at,kyc_status from users where phone=$1",[phone]);
   return q.rows[0]||null;
 }
 async function handleCommand({phone,text,db}){
@@ -28,6 +28,7 @@ async function handleCommand({phone,text,db}){
 
   if(["hi","hello","menu","start"].includes(normalized)) return menu();
   if(!user) return "Your WhatsApp number is not linked to a Liholiswano account yet. Please complete account setup first.";
+  if(!user.phone_verified_at) return "This WhatsApp number is registered but not verified for Liholiswano. Use the linking code sent from your Liholiswano account: LINK <6-digit code>.";
 
   if(normalized==="1"||normalized==="account")
     return "Account\nEmail: "+user.email+"\nCountry: "+user.country+"\nKYC: "+user.kyc_status;
