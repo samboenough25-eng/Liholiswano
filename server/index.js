@@ -15,7 +15,8 @@ const {Pool}=require("pg");
 const {normalizePhone,verifySignature,normalizeInbound,menu,sendText}=require("./whatsapp");
 const {handleCommand}=require("./whatsapp-router");
 const {installStageAKyc}=require("./kyc-stage-a");
-const {installSubscriptions}=require("./subscriptions");
+const {installSubscriptions,createAuthorization}=require("./subscriptions");
+const {installTransactionAuthorization}=require("./transaction-authorization");
 
 const app=express();
 const port=Number(process.env.PORT||3000);
@@ -297,6 +298,7 @@ app.post("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(
 
 installStageAKyc({app,db,auth,requireRole,audit});
 installSubscriptions({app,db,auth,requireRole,audit});
+installTransactionAuthorization({app,db,auth,audit});
 
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
 function startBackgroundWorker(name,script,intervalMs){
