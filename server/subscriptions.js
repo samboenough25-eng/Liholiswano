@@ -72,7 +72,7 @@ async function prepareSubscriptionForUser(db, user) {
   const ckey = customerKey(user.id);
   const rate = user.country === "BW" ? (process.env.SUBSCRIPTION_RATE_BW_P_PER_USD || null) : (process.env.SUBSCRIPTION_RATE_SZ_E_PER_USD || null);
   const ins = await db.query(
-    "insert into subscription_payments(user_id,period_start,period_key,currency,fiat_amount_minor,token_address,token_amount_base_units,token_decimals,chain_id,subscription_contract,subscription_key,customer_key,status,exchange_rate,rate_source) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared',$13,$14) returning *",
+    "insert into subscription_payments(user_id,period_start,period_key,currency,fiat_amount_minor,token_address,token_amount_base_units,token_decimals,chain_id,subscription_contract,subscription_key,customer_key,wallet_address,status,exchange_rate,rate_source) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared',$13,$14) returning *",
     [user.id,current,period,account.currency,account.minor,token,tokenAmount.toString(),decimals,Number(process.env.BSC_CHAIN_ID || 97),contract,key,ckey,rate,rate ? "configured" : null]
   );
   await db.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'prepared',$2)",[ins.rows[0].id,JSON.stringify({wallet:wallet.rows[0].address})]);
