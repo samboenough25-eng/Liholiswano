@@ -264,6 +264,10 @@ async function start(){
         if(legacy.rowCount) throw new Error("Both incompatible group_memberships and group_memberships_legacy tables exist; manual migration required");
         await pool.query('alter table group_memberships rename to group_memberships_legacy');
       }
+      const walletColumns=await pool.query("select column_name from information_schema.columns where table_schema='public' and table_name='wallets'");
+      const walletColumnNames=new Set(walletColumns.rows.map(r=>r.column_name));
+      if(walletColumnNames.has("wallet_address")&&!walletColumnNames.has("address")) await pool.query("alter table wallets rename column wallet_address to address");
+      else if(walletColumnNames.has("wallet")&&!walletColumnNames.has("address")) await pool.query("alter table wallets rename column wallet to address");
       const schema=fs.readFileSync(path.join(__dirname,"db","schema.sql"),"utf8");
       await pool.query(schema);
       for(const file of ["whatsapp.sql","indexer.sql","transactions.sql"]){await pool.query(fs.readFileSync(path.join(__dirname,"db",file),"utf8"));}
