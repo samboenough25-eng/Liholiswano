@@ -28,6 +28,9 @@ const appAbi = [
   "function contribute(bytes32)",
   "function submitBid(bytes32,uint256)",
   "function settleRound(bytes32)",
+  "function pause()",
+  "function unpause()",
+  "function paused() view returns (bool)",
   "function approvedToken(address) view returns (bool)",
   "function getMember(bytes32,address) view returns (address,bool,bool,bool,bool,bool,uint256,uint256,uint256,uint256)",
   "function protocolFeeBps() view returns (uint256)",
@@ -113,6 +116,25 @@ async function main() {
   console.log("MEMBER_3=" + members[2].address);
 
   await send("CREATE_GROUP", app.createGroup(groupId, TOKEN, contribution, collateral, maxBidBps, 3));
+
+  // Emergency-pause control test. The owner pauses the protocol and a
+  // customer financial action must be rejected on-chain. We then unpause
+  // and continue the same group through the normal financial lifecycle.
+  await send("PAUSE_PROTOCOL", app.pause());
+  if (!(await app.paused())) throw new Error("Protocol pause state did not become true");
+
+  let pauseBlocked = false;
+  try {
+    await app.connect(members[0]).joinGroup(groupId);
+  } catch (error) {
+    pauseBlocked = true;
+    console.log("PAUSE_BLOCKED_ERROR=" + (error.shortMessage || error.message || "reverted"));
+  }
+  if (!pauseBlocked) throw new Error("Paused protocol accepted a financial join operation");
+
+  await send("UNPAUSE_PROTOCOL", app.unpause());
+  if (await app.paused()) throw new Error("Protocol pause state did not clear");
+  console.log("PAUSE_E2E=PASS");
 
   for (let i = 0; i < members.length; i++) {
     const memberToken = token.connect(members[i]);
