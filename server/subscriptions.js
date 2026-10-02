@@ -52,6 +52,41 @@ function explorerTx(tx) {
   return base + tx;
 }
 
+
+async function prepareSubscriptionForUser(db, user) {
+  const current = monthStart();
+  const period = periodKey(current);
+  const account = fiatForCountry(user.country);
+  const token = tokenAddress();
+  const contract = subscriptionAddress();
+  const tokenAmount = configuredTokenAmount(user.country);
+  const decimals = Number(process.env.SUBSCRIPTION_TOKEN_DECIMALS || 6);
+  const wallet = await db.query(
+    "select address,chain_id from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null limit 1",
+    [user.id, Number(process.env.BSC_CHAIN_ID || 97)]
+  );
+  if (!wallet.rowCount) throw new Error("Primary verified BNB wallet required");
+  const existing = await db.query("select * from subscription_payments where user_id=$1 and period_key=$2 limit 1",[user.id,period]);
+  if (existing.rowCount) return { payment: existing.rows[0], alreadyPaid: existing.rows[0].status === "confirmed", walletAddress: wallet.rows[0].address };
+  const key = makeSubscriptionKey(user.id, period);
+  const ckey = customerKey(user.id);
+  const rate = user.country === "BW" ? (process.env.SUBSCRIPTION_RATE_BW_P_PER_USD || null) : (process.env.SUBSCRIPTION_RATE_SZ_E_PER_USD || null);
+  const ins = await db.query(
+    "insert into subscription_payments(user_id,period_start,period_key,currency,fiat_amount_minor,token_address,token_amount_base_units,token_decimals,chain_id,subscription_contract,subscription_key,customer_key,status,exchange_rate,rate_source) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared',$13,$14) returning *",
+    [user.id,current,period,account.currency,account.minor,token,tokenAmount.toString(),decimals,Number(process.env.BSC_CHAIN_ID || 97),contract,key,ckey,rate,rate ? "configured" : null]
+  );
+  await db.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'prepared',$2)",[ins.rows[0].id,JSON.stringify({wallet:wallet.rows[0].address})]);
+  return { payment: ins.rows[0], alreadyPaid:false, walletAddress:wallet.rows[0].address };
+}
+
+async function createAuthorization(db,userId,paymentId) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const hash = crypto.createHash("sha256").update(token).digest("hex");
+  await db.query("update subscription_authorizations set used_at=now() where user_id=$1 and used_at is null",[userId]);
+  await db.query("insert into subscription_authorizations(user_id,payment_id,token_hash,expires_at) values($1,$2,$3,now()+interval '30 minutes')",[userId,paymentId,hash]);
+  return token;
+}
+
 function installSubscriptions({ app, db, auth, requireRole, audit }) {
   app.get("/api/subscription", auth, async (req, res) => {
     const account = fiatForCountry(req.user.country);
@@ -75,47 +110,19 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
 
   app.post("/api/subscription/prepare", auth, async (req, res) => {
     try {
-      const current = monthStart();
-      const period = periodKey(current);
-      const account = fiatForCountry(req.user.country);
-      const token = tokenAddress();
-      const contract = subscriptionAddress();
-      const tokenAmount = configuredTokenAmount(req.user.country);
-      const decimals = Number(process.env.SUBSCRIPTION_TOKEN_DECIMALS || 6);
-      if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) throw new Error("Invalid stablecoin decimals");
-      const wallet = await db().query(
-        "select address,chain_id from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null limit 1",
-        [req.user.id, Number(process.env.BSC_CHAIN_ID || 97)]
-      );
-      if (!wallet.rowCount) return res.status(400).json({ error: "Primary verified BNB wallet required" });
-      const existing = await db().query(
-        "select * from subscription_payments where user_id=$1 and period_key=$2 limit 1",
-        [req.user.id, period]
-      );
-      if (existing.rowCount && existing.rows[0].status === "confirmed") return res.json({ payment: existing.rows[0], alreadyPaid: true });
-      if (existing.rowCount && ["prepared","signed","submitted","reconciliation_required"].includes(existing.rows[0].status)) {
-        return res.json({ payment: existing.rows[0], resume: true });
-      }
-      const key = makeSubscriptionKey(req.user.id, period);
-      const ckey = customerKey(req.user.id);
-      const rate = process.env.SUBSCRIPTION_RATE_BW_P_PER_USD || process.env.SUBSCRIPTION_RATE_SZ_E_PER_USD || null;
-      const ins = await db().query(
-        "insert into subscription_payments(user_id,period_start,period_key,currency,fiat_amount_minor,token_address,token_amount_base_units,token_decimals,chain_id,subscription_contract,subscription_key,customer_key,status,exchange_rate,rate_source) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'prepared',$13,$14) returning *",
-        [req.user.id,current,period,account.currency,account.minor,token,tokenAmount.toString(),decimals,Number(process.env.BSC_CHAIN_ID || 97),contract,key,ckey,rate,rate ? "configured" : null]
-      );
-      await db().query("insert into subscription_events(payment_id,event_type,metadata) values($1,'prepared',$2)",[ins.rows[0].id,JSON.stringify({wallet:wallet.rows[0].address})]);
-      res.status(201).json({
-        payment: ins.rows[0],
+      const result = await prepareSubscriptionForUser(db(), req.user);
+      res.status(result.alreadyPaid ? 200 : 201).json({
+        payment: result.payment,
+        alreadyPaid: result.alreadyPaid,
         authorization: {
-          contract,
-          token,
-          customerKey: ckey,
-          subscriptionKey: key,
-          periodStart: periodStartUnix(current),
-          amount: tokenAmount.toString(),
-          decimals,
-          chainId: Number(process.env.BSC_CHAIN_ID || 97),
-          explorer: null
+          contract: result.payment.subscription_contract,
+          token: result.payment.token_address,
+          customerKey: result.payment.customer_key,
+          subscriptionKey: result.payment.subscription_key,
+          periodStart: periodStartUnix(monthStart(result.payment.period_start)),
+          amount: String(result.payment.token_amount_base_units),
+          decimals: Number(result.payment.token_decimals),
+          chainId: Number(result.payment.chain_id)
         }
       });
     } catch (e) {
@@ -176,9 +183,27 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
     }
   });
 
+  app.get("/api/whatsapp/authorization/:token", async (req,res) => {
+    try {
+      const raw = String(req.params.token || "");
+      if (!/^[a-f0-9]{64}$/.test(raw)) return res.status(400).json({error:"Invalid authorization token"});
+      const hash = crypto.createHash("sha256").update(raw).digest("hex");
+      const q = await db().query("select a.id,a.payment_id,a.user_id,a.expires_at,p.period_key,p.currency,p.fiat_amount_minor,p.token_address,p.token_amount_base_units,p.token_decimals,p.chain_id,p.subscription_contract,p.subscription_key,p.customer_key,u.phone from subscription_authorizations a join subscription_payments p on p.id=a.payment_id join users u on u.id=a.user_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() limit 1",[hash]);
+      if (!q.rowCount) return res.status(404).json({error:"Authorization link is invalid or expired"});
+      const x=q.rows[0];
+      res.json({
+        requestId:x.payment_id,paymentId:x.payment_id,period:x.period_key,fiatLabel:x.currency==="P"?"P5.00":"E5.00",
+        token:x.token_address,tokenAmount:String(x.token_amount_base_units),decimals:Number(x.token_decimals),
+        chainId:Number(x.chain_id),contract:x.subscription_contract,subscriptionKey:x.subscription_key,customerKey:x.customer_key,
+        periodStart:periodStartUnix(monthStart(new Date(x.period_key+"-01T00:00:00Z"))),
+        walletAddress:(await db().query("select address from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null limit 1",[x.user_id,x.chain_id])).rows[0]?.address || null
+      });
+    } catch (e) { res.status(500).json({error:"Unable to load authorization request"}); }
+  });
+
   app.get("/api/admin/subscriptions", auth, requireRole(["admin","compliance","support"]), async (req, res) => {
     const q = await db().query("select s.*,u.email,u.country,u.phone from subscription_payments s join users u on u.id=s.user_id order by s.period_start desc,s.created_at desc limit 1000");
     res.json({ payments: q.rows });
   });
 }
-module.exports = { installSubscriptions, SUBSCRIPTION_ABI, monthStart, periodKey, makeSubscriptionKey, customerKey };
+module.exports = { installSubscriptions, prepareSubscriptionForUser, createAuthorization, SUBSCRIPTION_ABI, monthStart, periodKey, makeSubscriptionKey, customerKey };
