@@ -261,3 +261,6 @@ create table if not exists reconciliation_member_snapshots (
   unique(run_id,group_id,wallet_address)
 );
 create index if not exists idx_recon_member_snapshot_group on reconciliation_member_snapshots(group_id,created_at desc);
+
+create unique index if not exists uq_wallet_chain_address_lower on wallets(chain_id, lower(address));
+create index if not exists idx_wallet_challenges_expiry on wallet_challenges(expires_at) where used_at is null;
