@@ -4,7 +4,7 @@ const {JsonRpcProvider,Interface,isAddress,getAddress}=require("ethers");
 const {PROTOCOL_ABI}=require("./blockchain");
 
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
-const RPC=process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
+const RPC=process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const EXPECTED_CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
 const MAX_RANGE=Number(process.env.INDEXER_MAX_BLOCK_RANGE||100);
@@ -29,6 +29,7 @@ function jsonSafe(value){
 function requireConfig(){
   if(!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not configured");
   if(!CONTRACT||!isAddress(CONTRACT)) throw new Error("BNB_CONTRACT_ADDRESS is not configured with a valid address");
+  if(process.env.REQUIRE_DEDICATED_RPC==="true"&&!process.env.BSC_RPC_URL) throw new Error("A dedicated BSC_RPC_URL is required for production indexing");
 }
 async function ensureSchema(){
   await pool.query(`
