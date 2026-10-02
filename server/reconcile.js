@@ -25,7 +25,7 @@ function jsonSafe(v){if(typeof v==="bigint")return v.toString();if(Array.isArray
 function add(list,category,entityType,entityKey,expected,actual,severity="critical"){list.push({severity,category,entityType,entityKey,expected,actual});}
 
 async function ensureSchema(){
- await pool.query(\`
+ await pool.query(`
   create table if not exists reconciliation_state(
     chain_id bigint primary key, contract_address varchar(42) not null,
     last_processed_block bigint not null default -1, last_block_hash varchar(66),
@@ -57,7 +57,7 @@ async function ensureSchema(){
     unique(run_id,group_id,wallet_address)
   );
   create index if not exists idx_recon_member_snapshot_group on reconciliation_member_snapshots(group_id,created_at desc);
- \`);
+ `);
 }
 
 async function safeBlock(){
@@ -72,15 +72,15 @@ async function loadCursor(){
  return {block:Number(row.last_processed_block),hash:row.last_block_hash||null};
 }
 async function saveCursor(block,hash){
- await pool.query(\`insert into reconciliation_state(chain_id,contract_address,last_processed_block,last_block_hash,updated_at)
+ await pool.query(`insert into reconciliation_state(chain_id,contract_address,last_processed_block,last_block_hash,updated_at)
  values($1,$2,$3,$4,now())
- on conflict(chain_id) do update set contract_address=excluded.contract_address,last_processed_block=excluded.last_processed_block,last_block_hash=excluded.last_block_hash,updated_at=now()\`,
+ on conflict(chain_id) do update set contract_address=excluded.contract_address,last_processed_block=excluded.last_processed_block,last_block_hash=excluded.last_block_hash,updated_at=now()`,
  [CHAIN_ID,CONTRACT,block,hash]);
 }
 async function verifyCursor(cursor){
  if(cursor.block<0||!cursor.hash)return;
  const b=await rpc.getBlock(cursor.block);
- if(!b)throw new Error(\`Reconciliation cursor block \${cursor.block} is unavailable\`);
+ if(!b)throw new Error(`Reconciliation cursor block \${cursor.block} is unavailable`);
  if(b.hash&&!eq(b.hash,cursor.hash))throw new Error("Reconciliation cursor hash changed; explicit reorg recovery is required");
 }
 async function rangeLogs(from,to){
@@ -141,15 +141,15 @@ async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
  const direction=ev.event_name==="ContributionPaid"?"debit":"credit";
  const user=await pool.query("select u.id from users u join wallets w on w.user_id=u.id where w.chain_id=$1 and lower(w.address)=lower($2) and w.verified_at is not null limit 1",[CHAIN_ID,wallet]);
  const userId=user.rowCount?user.rows[0].id:null;
- const ref=\`chain:\${CHAIN_ID}:\${ev.tx_hash}:\${ev.log_index}\`;
+ const ref=`chain:\${CHAIN_ID}:\${ev.tx_hash}:\${ev.log_index}`;
  let ledgerId=null;
  const existing=await pool.query("select id from ledger_entries where reference=$1 limit 1",[ref]);
  if(existing.rowCount)ledgerId=existing.rows[0].id;
  else if(userId){
   const amount=formatUnits(BigInt(raw),ti.decimals);
-  const ins=await pool.query(\`insert into ledger_entries(user_id,group_id,entry_type,asset_symbol,chain_id,amount,direction,status,reference,metadata)
+  const ins=await pool.query(`insert into ledger_entries(user_id,group_id,entry_type,asset_symbol,chain_id,amount,direction,status,reference,metadata)
    select $1,g.id,$2,$3,$4,$5,$6,'confirmed',$7,$8 from groups g
-   where g.chain_id=$4 and g.onchain_group_id=$9 returning id\`,
+   where g.chain_id=$4 and g.onchain_group_id=$9 returning id`,
    [userId,ev.event_name==="ContributionPaid"?"rosca.contribution":"rosca.payout",ti.symbol,CHAIN_ID,amount,direction,ref,
     JSON.stringify({txHash:ev.tx_hash,logIndex:ev.log_index,rawAmount:raw,groupId:group}),group]);
   if(ins.rowCount)ledgerId=ins.rows[0].id;
@@ -169,9 +169,9 @@ async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
    if(totalOut!==expected)add(discrepancies,"settlement_transfer_mismatch","financial_event",ref,{outgoingTotal:expected.toString()},{outgoingTotal:totalOut.toString(),transfers:receipt.transfers},"critical");
   }
  }
- await pool.query(\`insert into reconciliation_projection(chain_id,contract_address,tx_hash,log_index,event_name,group_id,wallet_address,user_id,asset_symbol,asset_decimals,amount,direction,ledger_entry_id,block_number)
+ await pool.query(`insert into reconciliation_projection(chain_id,contract_address,tx_hash,log_index,event_name,group_id,wallet_address,user_id,asset_symbol,asset_decimals,amount,direction,ledger_entry_id,block_number)
  values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
- on conflict(chain_id,tx_hash,log_index,event_name) do update set user_id=excluded.user_id,ledger_entry_id=excluded.ledger_entry_id\`,
+ on conflict(chain_id,tx_hash,log_index,event_name) do update set user_id=excluded.user_id,ledger_entry_id=excluded.ledger_entry_id`,
  [CHAIN_ID,CONTRACT,ev.tx_hash,ev.log_index,ev.event_name,group,wallet,userId,ti.symbol,ti.decimals,raw,direction,ledgerId,ev.block_number]);
 }
 async function reconcileGroups(runId,discrepancies,tokenCache){
@@ -192,8 +192,8 @@ async function reconcileGroups(runId,discrepancies,tokenCache){
   for(const m of members.rows){
    try{
     const cm=await memberState(rawId,m.wallet_address);
-    await pool.query(\`insert into reconciliation_member_snapshots(run_id,group_id,wallet_address,active,defaulted,won_this_rotation,contributed_this_round,bid_submitted,bid_bps,total_wins,total_contributed,total_received,block_number)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)\`,
+    await pool.query(`insert into reconciliation_member_snapshots(run_id,group_id,wallet_address,active,defaulted,won_this_rotation,contributed_this_round,bid_submitted,bid_bps,total_wins,total_contributed,total_received,block_number)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
      [runId,id,m.wallet_address,cm.active,cm.defaulted,cm.wonThisRotation,cm.contributedThisRound,cm.bidSubmitted,cm.bidBps,cm.totalWins,cm.totalContributed,cm.totalReceived,await safeBlock()]);
     if(cm.active!== (m.status==="active"))add(discrepancies,"member_status_mismatch","membership",m.wallet_address,{active:m.status==="active"},{active:cm.active,defaulted:cm.defaulted});
     if(!eq(cm.account,m.wallet_address))add(discrepancies,"member_address_mismatch","membership",m.wallet_address,{account:m.wallet_address},{account:cm.account});
@@ -229,8 +229,8 @@ async function run(){
   const cursor=await loadCursor();await verifyCursor(cursor);
   const from=Math.max(cursor.block+1,START!==null?START:0);
   const to=Math.min(safe,from+MAX_RANGE-1);
-  const run=await pool.query(\`insert into reconciliation_runs(chain_id,contract_address,from_block,to_block,status,details)
-   values($1,$2,$3,$4,'running',$5) returning id\`,
+  const run=await pool.query(`insert into reconciliation_runs(chain_id,contract_address,from_block,to_block,status,details)
+   values($1,$2,$3,$4,'running',$5) returning id`,
    [CHAIN_ID,CONTRACT,from,to,JSON.stringify({mode:"financial-reconciliation",latestBlock:latest,safeBlock:safe})]);
   const runId=run.rows[0].id,discrepancies=[],tokenCache=new Map();
   try{
@@ -238,13 +238,13 @@ async function run(){
    const groupCount=await reconcileGroups(runId,discrepancies,tokenCache);
    if(from<=to){
     const logs=await rangeLogs(from,to),chainFacts=new Map();
-    for(const log of logs){try{const p=iface.parseLog({topics:log.topics,data:log.data});if(p)chainFacts.set(\`\${log.transactionHash}:\${log.index}\`,p.name);}catch{}}
+    for(const log of logs){try{const p=iface.parseLog({topics:log.topics,data:log.data});if(p)chainFacts.set(`\${log.transactionHash}:\${log.index}`,p.name);}catch{}}
     const indexed=await pool.query("select tx_hash,log_index,event_name from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4",[CHAIN_ID,CONTRACT,from,to]);
-    const indexedFacts=new Map(indexed.rows.map(r=>[\`\${r.tx_hash}:\${r.log_index}\`,r.event_name]));
+    const indexedFacts=new Map(indexed.rows.map(r=>[`\${r.tx_hash}:\${r.log_index}`,r.event_name]));
     for(const [key,name] of chainFacts)if(!indexedFacts.has(key))add(discrepancies,"indexer_missing_event","chain_event",key,{eventName:name},{indexed:false},"critical");
     for(const [key,name] of indexedFacts)if(!chainFacts.has(key))add(discrepancies,"indexer_orphan_event","chain_event",key,{onchain:false},{indexedEvent:name},"critical");
     const facts=await pool.query("select tx_hash,log_index,event_name,args,block_number from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4 order by block_number,log_index",[CHAIN_ID,CONTRACT,from,to]);
-    for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",\`\${ev.tx_hash}:\${ev.log_index}\`,{projectable:true},{error:e.message},"critical");}}
+    for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`\${ev.tx_hash}:\${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
    }
    await reconcileTransactionRequests(discrepancies);
    const endHash=to>=0?(await rpc.getBlock(to))?.hash:null;
