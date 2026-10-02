@@ -8,10 +8,14 @@ const $=id=>document.getElementById(id);function show(x){$("status").textContent
 async function load(){if(!token)return show("Invalid authorization link.");const r=await fetch(API+"/api/whatsapp/transaction-authorization/"+encodeURIComponent(token));data=await r.json();if(!r.ok)return show(data.error||"Authorization unavailable");$("details").textContent=data.operation.toUpperCase()+" • ROSCA "+data.onchainGroupId+" • request "+data.requestId+(data.bidBps!=null?" • bid "+(data.bidBps/100)+"%":"");}
 async function connect(){if(!window.ethereum)return show("Open this page inside a BNB-compatible wallet browser.");provider=new ethers.BrowserProvider(window.ethereum);signer=await provider.getSigner();address=await signer.getAddress();show("Wallet connected: "+address);}
 async function auth(){try{if(!data)await load();if(!signer)await connect();const n=await provider.getNetwork();if(n.chainId!==BigInt(data.chainId))throw Error("Switch to BNB Smart Chain Testnet.");if(address.toLowerCase()!==data.walletAddress.toLowerCase())throw Error("Use the verified wallet linked to this Liholiswano account.");
-const app=new ethers.Contract(data.contractAddress,["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)","function getGroup(bytes32) view returns(bool,bool,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],signer);
+const app=new ethers.Contract(data.contractAddress,["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)","function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],signer);
 let tx;
-if(data.operation==="join")tx=await app.joinGroup(data.onchainGroupId);
-else if(data.operation==="bid")tx=await app.submitBid(data.onchainGroupId,data.bidBps);
+if(data.operation==="join"){
+ const g=await app.getGroup(data.onchainGroupId);
+ const token=new ethers.Contract(g[3],["function allowance(address,address) view returns(uint256)","function approve(address,uint256) returns(bool)"],signer);
+ if((await token.allowance(address,data.contractAddress))<g[5]){show("Approve the collateral amount in your wallet…");const a=await token.approve(data.contractAddress,g[5]);await a.wait();}
+ tx=await app.joinGroup(data.onchainGroupId);
+}else if(data.operation==="bid")tx=await app.submitBid(data.onchainGroupId,data.bidBps);
 else if(data.operation==="contribute"){
  const g=await app.getGroup(data.onchainGroupId);
  const token=new ethers.Contract(g[3],["function allowance(address,address) view returns(uint256)","function approve(address,uint256) returns(bool)"],signer);
