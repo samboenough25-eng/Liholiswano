@@ -3,7 +3,7 @@ const {Pool}=require("pg");
 const {JsonRpcProvider,Interface,Contract,isAddress,formatUnits,getAddress}=require("ethers");
 const {PROTOCOL_ABI}=require("./blockchain");
 
-const CHAIN_ID=Number(process.env.BNB_CHAIN_ID||97);
+const CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
 const RPC=process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
