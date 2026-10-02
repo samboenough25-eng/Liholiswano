@@ -91,41 +91,38 @@ async function verifyCursor(state){
   if(!b) throw new Error(`Indexed cursor block ${state.block} is no longer available`);
   if(b.hash&&b.hash.toLowerCase()!==state.hash.toLowerCase()) throw new Error("Indexed cursor block hash changed; manual reindex/reorg recovery is required");
 }
-async function indexRange(chainId,contractAddress,fromBlock,toBlock){
-  if(fromBlock>toBlock) return {logs:0,inserted:0,eventsByName:{}};
-  let logs;
-  let attempt=0;
-  let rangeFrom=fromBlock;
-  let rangeTo=toBlock;
-  while(true){
-    try{
-      logs=await rpc.getLogs({address:contractAddress,fromBlock:rangeFrom,toBlock:rangeTo});
-      break;
-    }catch(error){
-      const message=String(error?.shortMessage||error?.message||error);
-      const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
-      if(!retryable||attempt>=4) throw error;
-      attempt++;
-      if(rangeFrom<rangeTo){
-        rangeTo=rangeFrom+Math.max(0,Math.floor((rangeTo-rangeFrom)/2));
-      }
-      await new Promise(resolve=>setTimeout(resolve,Math.min(8000,500*Math.pow(2,attempt))));
-    }
+async function fetchLogsAdaptive(fromBlock,toBlock){
+  if(fromBlock>toBlock)return [];
+  try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
+  catch(error){
+    const message=String(error?.shortMessage||error?.message||error);
+    const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
+    if(!retryable||fromBlock===toBlock)throw error;
+    const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    const left=await fetchLogsAdaptive(fromBlock,mid);
+    const right=await fetchLogsAdaptive(mid+1,toBlock);
+    return left.concat(right);
   }
+}
+async function indexRange(chainId,contractAddress,fromBlock,toBlock){
+  if(fromBlock>toBlock)return {logs:0,inserted:0,eventsByName:{}};
+  const logs=await fetchLogsAdaptive(fromBlock,toBlock);
   let inserted=0; const eventsByName={};
   for(const log of logs){
     let parsed;
     try{parsed=iface.parseLog({topics:log.topics,data:log.data});}catch(_){continue;}
-    if(!parsed) continue;
+    if(!parsed)continue;
     const args={};
     for(let i=0;i<parsed.fragment.inputs.length;i++){const input=parsed.fragment.inputs[i];args[input.name||String(i)]=jsonSafe(parsed.args[i]);}
     const r=await pool.query(`insert into chain_events(chain_id,contract_address,block_number,block_hash,tx_hash,log_index,event_name,args)
       values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(chain_id,tx_hash,log_index) do nothing`,
       [chainId,contractAddress,log.blockNumber,log.blockHash,log.transactionHash,log.index,parsed.name,JSON.stringify(args)]);
-    inserted+=r.rowCount; eventsByName[parsed.name]=(eventsByName[parsed.name]||0)+r.rowCount;
+    inserted+=r.rowCount;eventsByName[parsed.name]=(eventsByName[parsed.name]||0)+r.rowCount;
   }
   return {logs:logs.length,inserted,eventsByName};
 }
+
 async function run(){
   requireConfig(); await ensureSchema();
   const lock=await pool.query("select pg_try_advisory_lock(hashtext('liholiswano-bnb-indexer')) as locked");
