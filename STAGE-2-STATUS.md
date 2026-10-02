@@ -1,6 +1,6 @@
-# Stage 2 status — BNB Smart Chain Testnet
+# BNB implementation status
 
-## Verified completed
+## Verified
 
 - Solidity ROSCA protocol contract.
 - Automatic full-group locking.
@@ -10,7 +10,7 @@
 - Reentrancy protection.
 - Exact standard-token transfer checks.
 - Two-step ownership transfer.
-- Hardhat unit tests.
+- Hardhat contract tests.
 - Local three-wallet E2E.
 - Browser static validation.
 - BNB Testnet deployment workflow.
@@ -22,7 +22,7 @@
 - BNB API foundation.
 - Transaction-request idempotency foundation.
 - WhatsApp customer-channel foundation.
-- BNB GitHub CI currently passes compile, tests, local E2E and web validation.
+- Live BNB Testnet three-wallet financial E2E: PASS.
 
 ## Current Testnet deployment
 
@@ -32,33 +32,22 @@
 
 MockUSDT is a development token only.
 
-## Current live gate
+## Current integration gate
 
-The complete three-wallet BNB Testnet financial cycle has **not yet been
-verified end-to-end**.
+The smart-contract financial cycle is proven on Testnet. The remaining technical gate is the off-chain financial data path:
 
-The controlled E2E workflow was initially blocked by a YAML parsing defect;
-that workflow has now been corrected. The next execution reached the actual
-Testnet cycle and failed for a real external prerequisite: the deployer wallet
-had only about 0.000268 tBNB while the test attempted to fund three temporary
-wallets with 0.01 tBNB each.
+1. index every emitted contract event reliably;
+2. catch up without public-RPC rate-limit failures;
+3. reconcile indexed events against application groups, memberships, transactions and ledger entries;
+4. prove restart/idempotency and reorg handling;
+5. verify operational monitoring and alerting.
 
-The E2E code has now also been corrected to:
+The current indexer is an event indexer with reconciliation foundations; it is not yet a complete business-state reconciliation engine.
 
-- fail early with a precise minimum-balance message;
-- use a smaller configurable temporary-member gas allocation;
-- verify deployed contract and token bytecode;
-- verify the test token is allowlisted;
-- calculate the expected payout from the deployed protocol fee;
-- correctly check the `totalWins` tuple field.
+## Production work still required
 
-Therefore the remaining E2E blocker is **testnet gas funding**, not the YAML
-workflow parser.
-
-## Remaining production work
-
-1. Complete the live Testnet ROSCA E2E.
-2. Reconcile on-chain events with PostgreSQL.
+1. Complete live PostgreSQL reconciliation.
+2. Harden RPC/indexer infrastructure.
 3. Verify indexer restart/idempotency and reorg recovery.
 4. Connect the managed-wallet provider.
 5. Connect WhatsApp Business.
@@ -68,5 +57,4 @@ workflow parser.
 9. Configure a real production stablecoin only after the above gates.
 10. Complete Botswana/Eswatini compliance and controlled launch preparation.
 
-Testnet CI success is not a security audit or authorization for real-money
-operation.
+Testnet success is not a security audit or authorization for real-money operation.
