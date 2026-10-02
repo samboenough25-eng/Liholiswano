@@ -2,6 +2,8 @@ const crypto = require("crypto");
 const { menu } = require("./whatsapp");
 const { groupState, memberState } = require("./blockchain");
 const { assertAddress } = require("./wallet");
+const { prepareSubscriptionForUser, createAuthorization: createSubscriptionAuthorization } = require("./subscriptions");
+const { createTransactionAuthorization } = require("./transaction-authorization");
 
 async function userByPhone(db, phone) {
   const q = await db.query(
@@ -44,6 +46,11 @@ function help() {
     "BALANCE — confirmed balance",
     "PAYOUT <group ID> — current payout status",
     "TX <group ID> — recent transactions",
+    "BID <group ID> <bid %> — submit a bid",
+    "SUBSCRIPTION — monthly platform fee",
+    "PAY — prepare this month’s subscription payment",
+    "CONFIRM <request ID> — explicitly authorize a prepared ROSCA request",
+    "CONFIRM PAY <payment ID> — authorize the monthly subscription",
     "SUPPORT <message> — open support ticket",
     "",
     "Financial requests are not completed until the required wallet authorization and blockchain confirmation succeed."
@@ -97,8 +104,8 @@ async function transactionText(db, user, groupId) {
   )].join("\n");
 }
 
-async function prepareFinancialRequest(db, user, operation, groupId) {
-  if (user.kyc_status !== "approved")
+async function prepareFinancialRequest(db, user, operation, groupId, extra = {}) {
+  if (user.kyc_status !== "approved" || user.kyc_decision_source === "manual_stage_a")
     return "KYC approval is required before this financial action.";
 
   if (!/^(0x)?[a-fA-F0-9]{64}$/.test(groupId))
@@ -128,7 +135,8 @@ async function prepareFinancialRequest(db, user, operation, groupId) {
     chainId: Number(wallet.rows[0].chain_id || process.env.BSC_CHAIN_ID || 97),
     contractAddress,
     status: "prepared",
-    source: "whatsapp"
+    source: "whatsapp",
+    ...extra
   };
 
   const inserted = await db.query(
@@ -220,6 +228,44 @@ async function handleCommand({ phone, text, db, contactId }) {
   if (normalized === "6") return "Send PAYOUT <group ID>.";
   if (normalized === "7" || normalized === "transactions") return transactionText(db, user);
   if (normalized === "8" || normalized === "support") return "Send SUPPORT followed by your message.";
+  if (normalized === "subscription" || normalized === "9") {
+    try {
+      const s=await prepareSubscriptionForUser(db,user);
+      return ["Monthly subscription","Due: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Status: "+(s.alreadyPaid?"PAID":s.payment.status.toUpperCase()),"Stablecoin amount is configured by the platform."].join("\n");
+    } catch(e) { return "Subscription is not configured yet: "+String(e.message||e); }
+  }
+  if (normalized === "pay") {
+    try {
+      const s=await prepareSubscriptionForUser(db,user);
+      if(s.alreadyPaid) return "Your subscription for "+s.payment.period_key+" is already paid.";
+      return ["Subscription payment prepared","Amount: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Payment request: "+s.payment.id,"","Reply CONFIRM PAY "+s.payment.id+" to receive the secure wallet authorization link.","No funds have moved yet."].join("\n");
+    } catch(e) { return "Unable to prepare subscription payment: "+String(e.message||e); }
+  }
+  if (normalized.startsWith("confirm pay ")) {
+    const paymentId=input.slice(12).trim();
+    try {
+      const q=await db.query("select id,status from subscription_payments where id=$1 and user_id=$2",[paymentId,user.id]);
+      if(!q.rowCount)return "Subscription payment not found.";
+      if(q.rows[0].status==="confirmed")return "That subscription payment is already confirmed.";
+      const token=await createSubscriptionAuthorization(db,user.id,paymentId);
+      const base=process.env.PUBLIC_WEB_URL||"https://liholiswano-bnb-web.onrender.com";
+      return ["Confirmed. Open the secure wallet authorization link:",base+"/subscription.html?request="+encodeURIComponent(paymentId)+"&token="+token,"","Review the amount and contract in the wallet before approving."].join("\n");
+    } catch(e){return "Unable to create the subscription authorization link: "+String(e.message||e);}
+  }
+  if (normalized.startsWith("confirm ")) {
+    const requestId=input.slice(8).trim();
+    if(!/^[0-9a-fA-F-]{36}$/.test(requestId))return "Use CONFIRM <transaction request ID>.";
+    try{
+      const q=await db.query("select id,status,operation from transaction_requests where id=$1 and user_id=$2",[requestId,user.id]);
+      if(!q.rowCount)return "Transaction request not found.";
+      if(q.rows[0].status==="confirmed")return "That transaction is already confirmed.";
+      if(q.rows[0].status!=="prepared")return "That transaction is not awaiting confirmation.";
+      const token=await createTransactionAuthorization(db,user.id,requestId);
+      const base=process.env.PUBLIC_WEB_URL||"https://liholiswano-bnb-web.onrender.com";
+      return ["Confirmed. Open the secure wallet authorization link:",base+"/authorize.html?request="+encodeURIComponent(requestId)+"&token="+token,"","Review the transaction in your wallet and explicitly approve it.","No transaction is complete until the blockchain receipt is verified."].join("\n");
+    }catch(e){return "Unable to create the wallet authorization link: "+String(e.message||e);}
+  }
+
 
   if (normalized.startsWith("support ")) {
     const description = input.slice(8).trim();
@@ -252,10 +298,19 @@ async function handleCommand({ phone, text, db, contactId }) {
     try {
       const result = await prepareFinancialRequest(db, user, "join", id);
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "join", groupId: id });
-      return result;
-    } catch (e) {
-      return "Unable to prepare the ROSCA join request: " + String(e.message || e);
-    }
+      return result+"\\n\\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the ROSCA join request: " + String(e.message || e);\n    }
+  }
+
+  if (normalized.startsWith("bid ")) {
+    const parts=input.split(/\\s+/);
+    if(parts.length!==3)return "Use BID <group ID> <bid %>.";
+    const bid=Number(parts[2]);
+    if(!Number.isFinite(bid)||bid<0||bid>50)return "Bid must be between 0 and 50%.";
+    try{
+      const result=await prepareFinancialRequest(db,user,"bid",parts[1],{bidBps:Math.round(bid*100)});
+      if(conv)await setConversation(db,conv.id,"awaiting_confirmation",{operation:"bid",groupId:parts[1]});
+      return result+"\\n\\nReply CONFIRM <request ID> to continue.";
+    }catch(e){return "Unable to prepare the bid: "+String(e.message||e);}
   }
 
   if (normalized.startsWith("contribute ")) {
@@ -264,10 +319,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     try {
       const result = await prepareFinancialRequest(db, user, "contribute", parts[1]);
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "contribute", groupId: parts[1] });
-      return result;
-    } catch (e) {
-      return "Unable to prepare the contribution request: " + String(e.message || e);
-    }
+      return result+"\\n\\nReply CONFIRM <request ID> to continue.";\n    } catch (e) {\n      return "Unable to prepare the contribution request: " + String(e.message || e);\n    }
   }
 
   if (normalized.startsWith("payout ")) {
