@@ -266,3 +266,73 @@ create index if not exists idx_recon_member_snapshot_group on reconciliation_mem
 
 create unique index if not exists uq_wallet_chain_address_lower on wallets(chain_id, lower(address));
 create index if not exists idx_wallet_challenges_expiry on wallet_challenges(expires_at) where used_at is null;
+
+
+-- Stage A: provider-neutral KYC workflow evidence and review state.
+create table if not exists kyc_identity_submissions (
+  id uuid primary key default gen_random_uuid(),
+  case_id uuid not null references kyc_cases(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  legal_first_name varchar(100) not null,
+  legal_last_name varchar(100) not null,
+  date_of_birth date not null,
+  document_type varchar(32) not null check (document_type in ('national_id','passport')),
+  document_country char(2) not null check (document_country in ('BW','SZ')),
+  document_last4 varchar(4),
+  residential_city varchar(100),
+  consent_version varchar(32) not null,
+  consented_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  unique(case_id)
+);
+
+create table if not exists kyc_documents (
+  id uuid primary key default gen_random_uuid(),
+  case_id uuid not null references kyc_cases(id) on delete cascade,
+  user_id uuid not null references users(id) on delete cascade,
+  document_type varchar(32) not null check (document_type in ('identity_front','identity_back','passport')),
+  original_filename varchar(255),
+  content_type varchar(100),
+  byte_size integer,
+  sha256 varchar(64),
+  storage_status varchar(32) not null default 'metadata_only' check (storage_status in ('metadata_only','stored','rejected','deleted')),
+  provider_reference varchar(255),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists kyc_events (
+  id bigserial primary key,
+  case_id uuid not null references kyc_cases(id) on delete cascade,
+  actor_user_id uuid references users(id) on delete set null,
+  event_type varchar(64) not null,
+  from_status varchar(32),
+  to_status varchar(32),
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists kyc_provider_events (
+  id uuid primary key default gen_random_uuid(),
+  provider varchar(64) not null,
+  provider_event_id varchar(255) not null,
+  provider_reference varchar(255),
+  event_type varchar(96) not null,
+  signature_valid boolean not null default false,
+  processed_at timestamptz,
+  payload_hash varchar(64) not null,
+  payload jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique(provider, provider_event_id)
+);
+
+alter table kyc_cases add column if not exists workflow_status varchar(32) not null default 'pending';
+alter table kyc_cases add column if not exists risk_level varchar(16);
+alter table kyc_cases add column if not exists consent_version varchar(32);
+alter table kyc_cases add column if not exists consented_at timestamptz;
+alter table kyc_cases add column if not exists decision_source varchar(32) not null default 'provider';
+alter table kyc_cases add column if not exists external_session_url text;
+
+create index if not exists idx_kyc_identity_case on kyc_identity_submissions(case_id);
+create index if not exists idx_kyc_documents_case on kyc_documents(case_id,created_at desc);
+create index if not exists idx_kyc_events_case on kyc_events(case_id,created_at desc);
+create index if not exists idx_kyc_provider_events_reference on kyc_provider_events(provider,provider_reference);
