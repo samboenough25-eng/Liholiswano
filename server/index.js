@@ -124,7 +124,7 @@ app.post("/api/auth/register",async(req,res)=>{
     await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country})]);
     let verification=null;
     if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email);
-    res.status(201).json({user,emailVerificationRequired:process.env.EMAIL_VERIFICATION_REQUIRED==="true",verification,token:process.env.EMAIL_VERIFICATION_REQUIRED==="true"&&!user.email_verified_at?null:sign(user)});
+    res.status(201).json({user,emailVerificationRequired:process.env.EMAIL_VERIFICATION_REQUIRED==="true",verification,token:sign(user)});
   }catch(e){
     if(e.name==="ZodError") return res.status(400).json({error:"Invalid registration data",details:e.issues.map(x=>x.path.join(".")+": "+x.message)});
     if(e.code==="23505") return res.status(409).json({error:"An account with that email already exists"});
