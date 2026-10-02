@@ -24,6 +24,10 @@ async function main() {
   const mock = await MockUSDT.deploy(deployer.address, initialSupply);
   await mock.waitForDeployment();
 
+  const Subscriptions = await ethers.getContractFactory("LiholiswanoSubscriptions");
+  const subscriptions = await Subscriptions.deploy(deployer.address, mock.target);
+  await subscriptions.waitForDeployment();
+
   const approveTx = await protocol.setApprovedToken(mock.target, true);
   await approveTx.wait();
 
@@ -33,6 +37,7 @@ async function main() {
   }
 
   console.log("LIHOLISWANO_CONTRACT=" + protocol.target);
+  console.log("SUBSCRIPTION_CONTRACT=" + subscriptions.target);
   console.log("TEST_TOKEN_CONTRACT=" + mock.target);
   console.log("DEPLOYER=" + deployer.address);
   console.log("CHAIN_ID=" + network.chainId.toString());
