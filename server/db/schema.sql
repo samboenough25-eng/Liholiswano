@@ -193,3 +193,42 @@ create index if not exists idx_auth_tokens_user_purpose on auth_tokens(user_id,p
 
 
 -- WhatsApp and indexing tables are kept in separate idempotent SQL files for clean module ownership.\n
+
+-- Stage 3: durable reconciliation evidence and discrepancy tracking.
+create table if not exists reconciliation_discrepancies (
+  id uuid primary key default gen_random_uuid(),
+  run_id uuid references reconciliation_runs(id) on delete cascade,
+  severity varchar(16) not null check (severity in ('info','warning','critical')),
+  category varchar(64) not null,
+  entity_type varchar(64),
+  entity_key varchar(255),
+  expected jsonb not null default '{}'::jsonb,
+  actual jsonb not null default '{}'::jsonb,
+  resolved_at timestamptz,
+  resolution_note text,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_recon_discrepancies_open on reconciliation_discrepancies(created_at desc) where resolved_at is null;
+create index if not exists idx_recon_discrepancies_run on reconciliation_discrepancies(run_id);
+
+create table if not exists reconciliation_projection (
+  id uuid primary key default gen_random_uuid(),
+  chain_id bigint not null,
+  contract_address varchar(42) not null,
+  tx_hash varchar(66) not null,
+  log_index integer not null,
+  event_name varchar(96) not null,
+  group_id varchar(66),
+  wallet_address varchar(42),
+  user_id uuid references users(id) on delete set null,
+  asset_symbol varchar(16),
+  asset_decimals integer,
+  amount numeric(78,0),
+  direction varchar(8),
+  ledger_entry_id uuid references ledger_entries(id) on delete set null,
+  block_number bigint not null,
+  created_at timestamptz not null default now(),
+  unique(chain_id,tx_hash,log_index,event_name)
+);
+create index if not exists idx_recon_projection_group on reconciliation_projection(group_id);
+create index if not exists idx_recon_projection_user on reconciliation_projection(user_id,created_at desc);
