@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Liholiswano Wallet Authorization</title>
+<style>body{font:16px system-ui;margin:0;background:#f5f7f6;color:#17211b}.wrap{max-width:760px;margin:auto;padding:20px}.card{background:#fff;border:1px solid #dbe5df;border-radius:12px;padding:18px;margin:14px 0}button{padding:11px 14px;border:0;border-radius:8px;background:#087f5b;color:#fff;font-weight:700;margin-right:8px}.status{white-space:pre-wrap;word-break:break-word;background:#eef5f0;padding:12px;border-radius:8px}.warn{font-size:13px;color:#6b3e00}</style></head>
+<body><main class="wrap"><h1>Liholiswano secure wallet authorization</h1><div class="card"><div id="details">Loading authorization…</div><p class="warn">WhatsApp creates the request, but your wallet must explicitly sign it. Liholiswano never asks for your seed phrase or private key.</p><button id="connect">Connect wallet</button><button id="authorize">Authorize transaction</button><div id="status" class="status">Not connected.</div></div>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script>
+const API="https://liholiswano-bnb-api.onrender.com";const token=new URLSearchParams(location.search).get("token");let data,provider,signer,address;
+const $=id=>document.getElementById(id);function show(x){$("status").textContent=typeof x==="string"?x:JSON.stringify(x,null,2)}
+async function load(){if(!token)return show("Invalid authorization link.");const r=await fetch(API+"/api/whatsapp/transaction-authorization/"+encodeURIComponent(token));data=await r.json();if(!r.ok)return show(data.error||"Authorization unavailable");$("details").textContent=data.operation.toUpperCase()+" • ROSCA "+data.onchainGroupId+" • request "+data.requestId+(data.bidBps!=null?" • bid "+(data.bidBps/100)+"%":"");}
+async function connect(){if(!window.ethereum)return show("Open this page inside a BNB-compatible wallet browser.");provider=new ethers.BrowserProvider(window.ethereum);signer=await provider.getSigner();address=await signer.getAddress();show("Wallet connected: "+address);}
+async function auth(){try{if(!data)await load();if(!signer)await connect();const n=await provider.getNetwork();if(n.chainId!==BigInt(data.chainId))throw Error("Switch to BNB Smart Chain Testnet.");if(address.toLowerCase()!==data.walletAddress.toLowerCase())throw Error("Use the verified wallet linked to this Liholiswano account.");
+const app=new ethers.Contract(data.contractAddress,["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)","function getGroup(bytes32) view returns(bool,bool,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],signer);
+let tx;
+if(data.operation==="join")tx=await app.joinGroup(data.onchainGroupId);
+else if(data.operation==="bid")tx=await app.submitBid(data.onchainGroupId,data.bidBps);
+else if(data.operation==="contribute"){
+ const g=await app.getGroup(data.onchainGroupId);
+ const token=new ethers.Contract(g[3],["function allowance(address,address) view returns(uint256)","function approve(address,uint256) returns(bool)"],signer);
+ const allowance=await token.allowance(address,data.contractAddress);if(allowance<g[4]){show("Approve the contribution amount in your wallet…");const a=await token.approve(data.contractAddress,g[4]);await a.wait();}
+ tx=await app.contribute(data.onchainGroupId);
+}else throw Error("Unsupported operation");
+show("Submitted: "+tx.hash+"\nWaiting for blockchain confirmation…");await tx.wait();
+const r=await fetch(API+"/api/whatsapp/transaction-authorization/"+encodeURIComponent(token)+"/record",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({txHash:tx.hash})});const d=await r.json();if(!r.ok)throw Error(d.error||"Receipt verification failed");show("Confirmed on blockchain.\n"+JSON.stringify(d,null,2));}
+catch(e){show(e.shortMessage||e.message||String(e))}}
+$("connect").onclick=connect;$("authorize").onclick=auth;load();
+</script></main></body></html>
