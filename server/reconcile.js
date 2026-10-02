@@ -146,6 +146,25 @@ async function receiptTransfers(txHash,token){
  }
  return {status:Number(receipt.status),blockNumber:Number(receipt.blockNumber),transfers};
 }
+async function recoverTransactionRequestFromEvent(ev){
+ const map={MemberJoined:"join",ContributionPaid:"contribute",BidSubmitted:"bid"};
+ const operation=map[ev.event_name]; if(!operation)return;
+ const args=ev.args||{};
+ const wallet=String(args.member||"").toLowerCase(); const group=String(args.groupId||"").toLowerCase();
+ if(!wallet||!group)return;
+ const q=await pool.query(`select id,user_id,status,request_json from transaction_requests
+   where chain_id=$1 and lower(contract_address)=lower($2) and operation=$3
+     and lower(wallet_address)=lower($4) and lower(onchain_group_id)=lower($5)
+     and status in ('prepared','signed','submitted','reconciliation_required')
+   order by created_at desc limit 1`,[CHAIN_ID,CONTRACT,operation,wallet,group]);
+ if(!q.rowCount)return;
+ const r=q.rows[0];
+ const u=await pool.query(`update transaction_requests set status='confirmed',tx_hash=$2,confirmed_at=now(),submitted_at=coalesce(submitted_at,now()),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning id`,[r.id,ev.tx_hash]);
+ if(u.rowCount){
+   await pool.query("insert into transaction_events(transaction_request_id,status,tx_hash,metadata) values($1,'confirmed',$2,$3)",[r.id,ev.tx_hash,JSON.stringify({source:"reconciliation",event:ev.event_name,logIndex:ev.log_index})]);
+   await pool.query("insert into blockchain_transactions(user_id,chain_id,tx_hash,contract_address,action,status,block_number,block_hash,payload,confirmed_at) values($1,$2,$3,$4,$5,'confirmed',$6,$7,$8,now()) on conflict(tx_hash) do nothing",[r.user_id,CHAIN_ID,ev.tx_hash,CONTRACT,operation,ev.block_number,null,JSON.stringify({source:"reconciliation",event:ev.event_name,onchainGroupId:group})]);
+ }
+}
 async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
  if(!["ContributionPaid","RoundSettled"].includes(ev.event_name))return;
  const args=ev.args||{},group=String(args.groupId),wallet=String(args.member||args.winner),token=(await chainGroup(group)).token;
@@ -257,7 +276,7 @@ async function run(){
     for(const [key,name] of chainFacts)if(!indexedFacts.has(key))add(discrepancies,"indexer_missing_event","chain_event",key,{eventName:name},{indexed:false},"critical");
     for(const [key,name] of indexedFacts)if(!chainFacts.has(key))add(discrepancies,"indexer_orphan_event","chain_event",key,{onchain:false},{indexedEvent:name},"critical");
     const facts=await pool.query("select tx_hash,log_index,event_name,args,block_number from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4 order by block_number,log_index",[CHAIN_ID,CONTRACT,from,to]);
-    for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`\${ev.tx_hash}:\${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
+    for(const ev of facts.rows){try{await recoverTransactionRequestFromEvent(ev); await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`\${ev.tx_hash}:\${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
    }
    await reconcileTransactionRequests(discrepancies);
    const endHash=to>=0?(await rpc.getBlock(to))?.hash:null;
