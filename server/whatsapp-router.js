@@ -125,7 +125,7 @@ async function prepareFinancialRequest(db, user, operation, groupId, extra = {})
     if (!member.active) return "Your verified wallet is not an active member of this ROSCA.";
   }
 
-  const idempotencyKey = crypto.randomUUID();
+  const idempotencyKey = extra.idempotencyKey || crypto.randomUUID();
   const group = await db.query("select id from groups where onchain_group_id=$1", [groupId]);
   const contractAddress = String(process.env.BNB_CONTRACT_ADDRESS || "");
   const requestJson = {
@@ -175,7 +175,7 @@ async function prepareFinancialRequest(db, user, operation, groupId, extra = {})
   ].join("\n");
 }
 
-async function handleCommand({ phone, text, db, contactId }) {
+async function handleCommand({ phone, text, db, contactId, messageId }) {
   const input = String(text || "").trim();
   const normalized = input.toLowerCase();
   const user = await userByPhone(db, phone);
@@ -310,7 +310,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     const bid=Number(parts[2]);
     if(!Number.isFinite(bid)||bid<0||bid>50)return "Bid must be between 0 and 50%.";
     try{
-      const result=await prepareFinancialRequest(db,user,"bid",parts[1],{bidBps:Math.round(bid*100)});
+      const result=await prepareFinancialRequest(db,user,"bid",parts[1],{bidBps:Math.round(bid*100),idempotencyKey:"whatsapp:"+String(messageId||crypto.randomUUID())+":bid"});
       if(conv)await setConversation(db,conv.id,"awaiting_confirmation",{operation:"bid",groupId:parts[1]});
       return result+"\n\nReply CONFIRM <request ID> to continue.";
     }catch(e){return "Unable to prepare the bid: "+String(e.message||e);}
@@ -320,7 +320,7 @@ async function handleCommand({ phone, text, db, contactId }) {
     const parts = input.split(/\s+/);
     if (parts.length !== 2) return "Use: CONTRIBUTE <group ID>.";
     try {
-      const result = await prepareFinancialRequest(db, user, "contribute", parts[1]);
+      const result = await prepareFinancialRequest(db, user, "contribute", parts[1], {idempotencyKey:"whatsapp:"+String(messageId||crypto.randomUUID())+":contribute"});
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "contribute", groupId: parts[1] });
       return result+"\n\nReply CONFIRM <request ID> to continue.";
     } catch (e) {
