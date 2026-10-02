@@ -65,6 +65,10 @@ function installTransactionAuthorization({app,db,auth,audit}){
         await client.query("commit");
         return res.status(409).json({error:"On-chain transaction reverted",txHash});
       }
+      const replay=await client.query("select id,transaction_request_id from transaction_authorizations where used_at is not null and exists(select 1 from transaction_requests tr where tr.id=transaction_authorizations.transaction_request_id and tr.tx_hash=$1) limit 1",[txHash]);
+      if(replay.rowCount)throw new Error("This transaction hash has already been consumed by another authorization");
+      const duplicate=await client.query("select id,status from transaction_requests where tx_hash=$1 and id<>$2 limit 1",[txHash,request.transaction_request_id]);
+      if(duplicate.rowCount)throw new Error("This transaction hash is already bound to another transaction request");
       const iface=new ethers.Interface(ABI);
       const parsed=iface.parseTransaction({data:tx.data});
       if(!parsed||parsed.name!==request.operation)throw new Error("Transaction calldata does not match the prepared operation");
@@ -73,6 +77,20 @@ function installTransactionAuthorization({app,db,auth,audit}){
       if(request.operation==="bid"){
         const expected=Number((request.request_json||{}).bidBps);
         if(!Number.isInteger(expected)||Number(parsed.args[1])!==expected)throw new Error("Bid amount does not match the prepared request");
+      }
+      if(request.operation==="join"){
+        const app=new ethers.Contract(request.contract_address,ABI,p);
+        const g=await app.getGroup(request.onchain_group_id);
+        const tokenAddress=String(g[3]).toLowerCase();
+        const transferIface=new ethers.Interface(["event Transfer(address indexed from,address indexed to,uint256 value)"]);
+        let collateralMatched=false;
+        for(const log of receipt.logs){
+          try{
+            const parsedLog=transferIface.parseLog(log);
+            if(parsedLog.name==="Transfer"&&String(parsedLog.args.from).toLowerCase()===String(request.wallet_address).toLowerCase()&&String(parsedLog.args.to).toLowerCase()===request.contract_address.toLowerCase()&&String(log.address).toLowerCase()===tokenAddress&&String(parsedLog.args.value)===String(g[5])) collateralMatched=true;
+          }catch{}
+        }
+        if(!collateralMatched)throw new Error("Join collateral transfer does not match the smart-contract collateral amount");
       }
       if(request.operation==="contribute"){
         const app=new ethers.Contract(request.contract_address,ABI,p);
