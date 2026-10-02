@@ -47,3 +47,26 @@ The active BNB repository is a Testnet financial application foundation, not yet
 ## Source-of-truth rule
 
 The root Solidity contract, root Hardhat configuration, `server/`, `web/`, `scripts/`, and `.github/workflows/` are the active implementation. There is no second blockchain implementation in this branch.
+
+
+## Stage A KYC workflow
+
+Stage A is a provider-neutral KYC development workflow. It is intentionally usable before a commercial KYC-provider account is available.
+
+Implemented:
+- customer KYC case creation/resume
+- Botswana/Eswatini country binding
+- legal name and date-of-birth capture
+- national-ID/passport selection
+- consent versioning and timestamp
+- identity-document metadata and SHA-256 fingerprint recording
+- no raw identity documents are persisted by Stage A
+- explicit server-side KYC state transitions
+- customer status/history endpoint
+- compliance/admin case queue and case detail
+- authorized manual approval/rejection/request-review decisions
+- immutable-style case event history and audit records
+- provider webhook boundary with HMAC-SHA256 verification and idempotent provider-event handling
+- provider capabilities are exposed so the UI cannot imply that Stage A performed biometric or government-database verification
+
+Stage A does **not** provide real biometric liveness, face matching, government ID database verification, sanctions/PEP screening, or production regulatory assurance. Those are provider/compliance integrations for later stages.
