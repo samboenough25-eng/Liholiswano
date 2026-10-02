@@ -233,6 +233,18 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
     }catch(e){try{await client.query("rollback");}catch{}res.status(409).json({error:e.message||"Unable to verify subscription transaction"});}finally{client.release();}
   });
 
+  app.get("/api/admin/subscriptions/summary", auth, requireRole(["admin","compliance","support"]), async (req,res) => {
+    const q=await db().query(`select
+      count(*) filter(where period_key=to_char(date_trunc('month',now()),'YYYY-MM') and status='confirmed')::int as paid_current,
+      count(distinct user_id) filter(where period_key=to_char(date_trunc('month',now()),'YYYY-MM'))::int as current_customers,
+      coalesce(sum(token_amount_base_units) filter(where status='confirmed'),0)::text as confirmed_token_base_units,
+      coalesce(sum(fiat_amount_minor) filter(where status='confirmed'),0)::bigint as confirmed_fiat_minor
+      from subscription_payments`);
+    const due=await db().query(`select count(*)::int as due_current from subscription_accounts a
+      where a.active=true and not exists(select 1 from subscription_payments p where p.user_id=a.user_id and p.period_key=to_char(date_trunc('month',now()),'YYYY-MM') and p.status='confirmed')`);
+    res.json({summary:{...q.rows[0],due_current:due.rows[0].due_current}});
+  });
+
   app.get("/api/admin/subscriptions", auth, requireRole(["admin","compliance","support"]), async (req, res) => {
     const q = await db().query("select s.*,u.email,u.country,u.phone from subscription_payments s join users u on u.id=s.user_id order by s.period_start desc,s.created_at desc limit 1000");
     res.json({ payments: q.rows });
