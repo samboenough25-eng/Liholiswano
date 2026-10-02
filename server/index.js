@@ -69,6 +69,23 @@ app.get("/api/whatsapp/webhook",(req,res)=>{
   if(mode==="subscribe" && process.env.WHATSAPP_VERIFY_TOKEN && token===process.env.WHATSAPP_VERIFY_TOKEN) return res.status(200).send(String(challenge||""));
   return res.sendStatus(403);
 });
+app.post("/api/whatsapp/link/request",auth,async(req,res)=>{
+  try{
+    const phone=normalizePhone(req.body.phone||req.user.phone);
+    if(!phone)return res.status(400).json({error:"A valid WhatsApp phone number is required"});
+    const existing=await db().query("select id from users where lower(phone)=lower($1) and id<>$2 limit 1",[phone,req.user.id]);
+    if(existing.rowCount)return res.status(409).json({error:"That phone number is already linked to another account"});
+    if(!process.env.WHATSAPP_API_URL||!process.env.WHATSAPP_ACCESS_TOKEN)return res.status(503).json({error:"WhatsApp provider is not configured"});
+    const code=String(crypto.randomInt(0,1000000)).padStart(6,"0");
+    const hash=crypto.createHash("sha256").update(code).digest("hex");
+    await db().query("update whatsapp_link_tokens set used_at=now() where user_id=$1 and used_at is null",[req.user.id]);
+    await db().query("insert into whatsapp_link_tokens(user_id,phone,token_hash,expires_at) values($1,$2,$3,now()+interval '10 minutes')",[req.user.id,phone,hash]);
+    const outbound=await sendText({to:phone,text:"Your Liholiswano WhatsApp linking code is "+code+". It expires in 10 minutes. If you did not request this, ignore this message."});
+    await audit(req.user.id,"whatsapp.link_requested","user",req.user.id,{phone});
+    res.json({sent:outbound.status==="sent",phone,expiresInMinutes:10});
+  }catch(e){console.error(e);res.status(503).json({error:"Unable to send WhatsApp linking code"});}
+});
+
 app.post("/api/whatsapp/webhook",async(req,res)=>{
   try{
     const raw=req.rawBody;
@@ -82,14 +99,7 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
     const existing=await db().query("select id from whatsapp_messages where provider_message_id=$1",[msg.messageId]);
     if(existing.rowCount) return res.sendStatus(200);
     await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
-    let reply;
-    if(!contact.rows[0].user_id){
-      const user=await db().query("select id from users where phone=$1",[phone]);
-      if(user.rowCount){
-        await db().query("update whatsapp_contacts set user_id=$1,verified_at=coalesce(verified_at,now()) where id=$2",[user.rows[0].id,contactId]);
-        reply=await handleCommand({phone,text:msg.text,db:db()});
-      } else reply="Your WhatsApp number is not linked to a Liholiswano account yet. Please complete account setup first.";
-    } else reply=await handleCommand({phone,text:msg.text,db:db()});
+    const reply=await handleCommand({phone,text:msg.text,db:db()});
     const outbound=await sendText({to:phone,text:reply});
     if(outbound.status==="sent") await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'sent')",[contactId,"local:"+msg.messageId,reply]);
     res.sendStatus(200);
