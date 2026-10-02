@@ -167,7 +167,7 @@ async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
    if(!match)add(discrepancies,"contribution_transfer_mismatch","financial_event",ref,{from:wallet,to:CONTRACT,amount:raw},{transfers:receipt.transfers},"critical");
   }else{
    const totalOut=receipt.transfers.filter(t=>eq(t.from,CONTRACT)).reduce((n,t)=>n+BigInt(t.value),0n);
-   const expected=BigInt(args.payout||raw)+BigInt(args.bidAmount||0);
+   const expected=BigInt(raw)+BigInt(args.bidAmount||0);
    if(totalOut!==expected)add(discrepancies,"settlement_transfer_mismatch","financial_event",ref,{outgoingTotal:expected.toString()},{outgoingTotal:totalOut.toString(),transfers:receipt.transfers},"critical");
   }
  }
