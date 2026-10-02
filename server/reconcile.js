@@ -21,7 +21,7 @@ const ERC20=new Interface([
 
 function eq(a,b){return String(a??"").toLowerCase()===String(b??"").toLowerCase();}
 function safe(v){return typeof v==="bigint"?v.toString():v;}
-function jsonSafe(v){if(typeof v==="bigint")return v.toString();if(Array.isArray(v))return v.map(jsonSafe);if(v&&typeof v==="object"){const o={};for(const [k,x] of Object.entries(v)){if(!/^\\d+$/.test(k))o[k]=jsonSafe(x);}return o;}return v;}
+function jsonSafe(v){if(typeof v==="bigint")return v.toString();if(Array.isArray(v))return v.map(jsonSafe);if(v&&typeof v==="object"){const o={};for(const [k,x] of Object.entries(v)){if(!/^\d+$/.test(k))o[k]=jsonSafe(x);}return o;}return v;}
 function add(list,category,entityType,entityKey,expected,actual,severity="critical"){list.push({severity,category,entityType,entityKey,expected,actual});}
 
 async function ensureSchema(){
