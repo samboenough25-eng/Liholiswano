@@ -251,6 +251,8 @@ async function run(){
    const endHash=to>=0?(await rpc.getBlock(to))?.hash:null;
    if(to>=from&&endHash)await saveCursor(to,endHash);
    const status=discrepancies.some(x=>x.severity==="critical")?"failed":discrepancies.length?"warning":"completed";
+   const categorySummary=Object.entries(discrepancies.reduce((m,x)=>(m[x.category]=(m[x.category]||0)+1,m),{}));
+   console.log(JSON.stringify({service:"liholiswano-reconciliation",status,runId,latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length,categories:categorySummary}));
    await pool.query("update reconciliation_runs set status=$2,finished_at=now(),completed_at=now(),details=$3,discrepancy_count=$4,report=$5 where id=$1",
     [runId,status,JSON.stringify({mode:"financial-reconciliation",latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length}),discrepancies.length,JSON.stringify({discrepancies})]);
    return {status,runId,latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length};
