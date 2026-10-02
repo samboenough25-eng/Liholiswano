@@ -67,6 +67,7 @@ jobs:
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          SUBSCRIPTION_CONTRACT_ADDRESS: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
         run: node scripts/e2e-testnet.js
 
       - name: Publish deployment summary
