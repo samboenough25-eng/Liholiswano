@@ -70,3 +70,21 @@ Implemented:
 - provider capabilities are exposed so the UI cannot imply that Stage A performed biometric or government-database verification
 
 Stage A does **not** provide real biometric liveness, face matching, government ID database verification, sanctions/PEP screening, or production regulatory assurance. Those are provider/compliance integrations for later stages.
+
+## WhatsApp-first customer architecture
+
+Customers are designed to use Liholiswano primarily through WhatsApp and their verified phone number. The web application is the administrative, compliance and operations interface. WhatsApp commands are authenticated by the linked phone/account and financial actions require wallet authorization before any blockchain transaction is accepted. WhatsApp never directly holds or controls customer funds.
+
+Customer commands include MENU, ACCOUNT, GROUPS, JOIN, CONTRIBUTE, BALANCE, PAYOUT, TX, SUPPORT and HELP. Every financial request is recorded and must reach on-chain confirmation before it is reported as completed.
+
+### WhatsApp production prerequisites
+
+The application contains the webhook, phone-linking, conversation-state and command layers. Production delivery still requires a WhatsApp Business/Cloud API account, permanent access token, phone-number configuration, webhook verification, app secret and approved templates where Meta requires them. These credentials belong in Render environment variables and must never be committed to GitHub.
+
+### Wallet authorization
+
+A verified wallet proves wallet ownership but does not authorize arbitrary financial actions. Production WhatsApp-only financial execution requires a secure signing/custody design, such as a controlled wallet-signing service or an explicitly supported wallet handoff. The API must never silently substitute a server-held treasury key for a customer's wallet.
+
+### Transaction lifecycle
+
+Financial requests use explicit states: prepared, signed, submitted, confirmed, reverted, failed, cancelled, and reconciliation_required. A transaction is not marked successful merely because a request was created; receipt status, chain, sender, target contract, function and group are verified before confirmation.
