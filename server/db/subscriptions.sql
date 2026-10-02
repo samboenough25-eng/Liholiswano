@@ -43,7 +43,6 @@ alter table subscription_payments add column if not exists wallet_address varcha
 alter table subscription_payments add column if not exists created_at timestamptz not null default now();
 alter table subscription_payments add column if not exists updated_at timestamptz not null default now();
 update subscription_payments s set wallet_address=w.address from wallets w where w.user_id=s.user_id and w.chain_id=s.chain_id and w.is_primary=true and w.verified_at is not null and s.wallet_address is null;
-alter table subscription_payments alter column wallet_address set not null;
 
 create table if not exists subscription_events (
   id bigserial primary key,
