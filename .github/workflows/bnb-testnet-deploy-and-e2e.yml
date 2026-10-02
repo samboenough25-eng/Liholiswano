@@ -1,0 +1,84 @@
+name: BNB Testnet Deploy and Full E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-and-e2e:
+    name: Fresh BNB Testnet deployment + pause + ROSCA E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout BNB application branch
+        uses: actions/checkout@v4
+        with:
+          ref: bnb-app-complete
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Validate deployment secrets
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: |
+          test -n "$DEPLOYER_PRIVATE_KEY" || { echo "DEPLOYER_PRIVATE_KEY is missing"; exit 1; }
+          test -n "$BSC_TESTNET_RPC_URL" || { echo "BSC_TESTNET_RPC_URL is missing"; exit 1; }
+          BSC_TESTNET_RPC_URL="$BSC_TESTNET_RPC_URL" DEPLOYER_PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" node - <<'NODE'
+          const { ethers } = require("ethers");
+          const provider = new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL);
+          const wallet = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
+          provider.getNetwork().then(async (network) => {
+            if (network.chainId !== 97n) throw new Error("RPC is not BSC Testnet (chain 97)");
+            const balance = await provider.getBalance(wallet.address);
+            console.log("DEPLOYER=" + wallet.address);
+            console.log("CHAIN_ID=" + network.chainId);
+            console.log("DEPLOYER_BALANCE_TBNB=" + ethers.formatEther(balance));
+          }).catch((e) => { console.error(e); process.exit(1); });
+          NODE
+
+      - name: Compile contracts
+        run: npm run compile
+
+      - name: Deploy fresh Testnet contracts
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: |
+          npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy-output.txt
+          CONTRACT=$(grep '^LIHOLISWANO_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          TOKEN=$(grep '^TEST_TOKEN_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          test -n "$CONTRACT" || { echo "Protocol address missing from deployment output"; exit 1; }
+          test -n "$TOKEN" || { echo "Token address missing from deployment output"; exit 1; }
+          echo "BNB_CONTRACT_ADDRESS=$CONTRACT" >> "$GITHUB_ENV"
+          echo "TEST_TOKEN_CONTRACT=$TOKEN" >> "$GITHUB_ENV"
+          echo "DEPLOYED_PROTOCOL=$CONTRACT" >> "$GITHUB_STEP_SUMMARY"
+          echo "DEPLOYED_TEST_TOKEN=$TOKEN" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run pause + full financial E2E against fresh deployment
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: node scripts/e2e-testnet.js
+
+      - name: Publish deployment summary
+        run: |
+          {
+            echo "## BNB Testnet deployment"
+            echo ""
+            echo "- Protocol: \`$BNB_CONTRACT_ADDRESS\`"
+            echo "- Test token: \`$TEST_TOKEN_CONTRACT\`"
+            echo "- Chain ID: \`97\`"
+            echo "- Pause test: passed"
+            echo "- Full ROSCA settlement E2E: passed"
+            echo ""
+            echo "This workflow does not change Render production configuration."
+          } >> "$GITHUB_STEP_SUMMARY"
