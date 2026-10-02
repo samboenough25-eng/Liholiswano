@@ -70,7 +70,18 @@ async function loadCursor(){
  const r=await pool.query("select last_processed_block,last_block_hash,contract_address from reconciliation_state where chain_id=$1",[CHAIN_ID]);
  if(!r.rowCount)return {block:START!==null?START-1:-1,hash:null};
  const row=r.rows[0];
- if(!eq(row.contract_address,CONTRACT))throw new Error("Reconciliation contract address mismatch");
+ if(!eq(row.contract_address,CONTRACT)){
+   // A fresh protocol deployment is a new reconciliation domain. Preserve the
+   // old run/discrepancy history, but explicitly classify open findings tied
+   // to the superseded contract instead of carrying them into the new domain.
+   await pool.query(`update reconciliation_discrepancies d
+     set resolved_at=now(),resolution_note=$2
+     from reconciliation_runs rr
+     where d.run_id=rr.id and d.resolved_at is null and rr.contract_address<>$1`,
+     [CONTRACT,"Superseded by a new BNB protocol contract deployment; retained as historical reconciliation evidence."]);
+   await pool.query("delete from reconciliation_state where chain_id=$1",[CHAIN_ID]);
+   return {block:START!==null?START-1:-1,hash:null};
+ }
  return {block:Number(row.last_processed_block),hash:row.last_block_hash||null};
 }
 async function saveCursor(block,hash){
