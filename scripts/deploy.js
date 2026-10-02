@@ -25,7 +25,9 @@ async function main() {
   await mock.waitForDeployment();
 
   const Subscriptions = await ethers.getContractFactory("LiholiswanoSubscriptions");
-  const subscriptions = await Subscriptions.deploy(deployer.address, mock.target);
+  const subscriptionTreasury = process.env.SUBSCRIPTION_TREASURY_ADDRESS || deployer.address;
+  if (!ethers.isAddress(subscriptionTreasury) || subscriptionTreasury === ethers.ZeroAddress) throw new Error("Invalid SUBSCRIPTION_TREASURY_ADDRESS");
+  const subscriptions = await Subscriptions.deploy(subscriptionTreasury, mock.target);
   await subscriptions.waitForDeployment();
 
   const approveTx = await protocol.setApprovedToken(mock.target, true);
@@ -38,6 +40,7 @@ async function main() {
 
   console.log("LIHOLISWANO_CONTRACT=" + protocol.target);
   console.log("SUBSCRIPTION_CONTRACT=" + subscriptions.target);
+  console.log("SUBSCRIPTION_TREASURY=" + subscriptionTreasury);
   console.log("TEST_TOKEN_CONTRACT=" + mock.target);
   console.log("DEPLOYER=" + deployer.address);
   console.log("CHAIN_ID=" + network.chainId.toString());
