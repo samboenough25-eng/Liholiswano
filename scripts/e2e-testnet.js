@@ -99,6 +99,7 @@ async function main() {
 
   const contribution = ethers.parseUnits("100", 6);
   const collateral = ethers.parseUnits("50", 6);
+  const winningBidBps = 1500n;
   const maxBidBps = 2000;
   const groupId = ethers.keccak256(ethers.toUtf8Bytes("LIHOLISWANO-TESTNET-" + Date.now()));
 
@@ -120,7 +121,7 @@ async function main() {
   }
 
   await send("BID_MEMBER_1", app.connect(members[0]).submitBid(groupId, 500));
-  await send("BID_MEMBER_2", app.connect(members[1]).submitBid(groupId, 1500));
+  await send("BID_MEMBER_2", app.connect(members[1]).submitBid(groupId, winningBidBps));
   await send("BID_MEMBER_3", app.connect(members[2]).submitBid(groupId, 1000));
 
   const before = await token.balanceOf(members[1].address);
@@ -130,19 +131,27 @@ async function main() {
 
   const member = await app.getMember(groupId, members[1].address);
   const feeBps = await app.protocolFeeBps();
-  const expectedPayout = ethers.parseUnits("255", 6);
+  const pot = contribution * 3n;
+  const bidAmount = pot * winningBidBps / 10000n;
+  const fee = bidAmount * feeBps / 10000n;
+  const distributable = bidAmount - fee;
+  const share = distributable / 2n;
+  const remainder = distributable - (share * 2n);
+  const expectedPayout = pot - bidAmount + remainder;
 
   if (payout !== expectedPayout) {
-    throw new Error("Unexpected winner payout: " + ethers.formatUnits(payout, 6));
+    throw new Error("Unexpected winner payout: actual=" + ethers.formatUnits(payout, 6) + " expected=" + ethers.formatUnits(expectedPayout, 6));
   }
-  if (member[6] !== 1n) {
-    throw new Error("Winner totalWins mismatch: " + member[6]);
+  // Member tuple order: account, active, defaulted, wonThisRotation,
+  // contributedThisRound, bidSubmitted, bidBps, totalWins, ...
+  if (member[7] !== 1n) {
+    throw new Error("Winner totalWins mismatch: " + member[7]);
   }
 
   console.log("SETTLEMENT_TX=" + settlement.hash);
   console.log("WINNER=" + members[1].address);
   console.log("PAYOUT=" + ethers.formatUnits(payout, 6));
-  console.log("EXPECTED_PAYOUT=255.000000");
+  console.log("EXPECTED_PAYOUT=" + ethers.formatUnits(expectedPayout, 6));
   console.log("PROTOCOL_FEE_BPS=" + feeBps.toString());
   console.log("TESTNET_E2E=PASS");
 }
