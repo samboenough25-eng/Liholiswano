@@ -46,3 +46,14 @@ create table if not exists subscription_events (
   metadata jsonb not null default '{}',
   created_at timestamptz not null default now()
 );
+
+create table if not exists subscription_authorizations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  payment_id uuid not null references subscription_payments(id) on delete cascade,
+  token_hash varchar(64) not null unique,
+  expires_at timestamptz not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_subscription_authorizations_expiry on subscription_authorizations(expires_at) where used_at is null;
