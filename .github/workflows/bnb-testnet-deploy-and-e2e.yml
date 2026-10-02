@@ -52,6 +52,7 @@ jobs:
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          SUBSCRIPTION_TREASURY_ADDRESS: ${{ vars.SUBSCRIPTION_TREASURY_ADDRESS }}
         run: |
           npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy-output.txt
           CONTRACT=$(grep '^LIHOLISWANO_CONTRACT=' deploy-output.txt | cut -d= -f2)
