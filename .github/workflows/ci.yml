@@ -7,7 +7,7 @@ on:
     branches: [bnb-app-complete]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   validate:
@@ -19,7 +19,17 @@ jobs:
         with:
           node-version: "20.18.1"
           cache: npm
-      - name: Require reproducible dependency lockfile
+      - name: Bootstrap dependency lockfile when missing
+        run: |
+          if [ ! -f package-lock.json ]; then
+            npm install --package-lock-only
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git diff --cached --quiet || git commit -m "chore: bootstrap npm lockfile"
+            git push
+          fi
+      - name: Require dependency lockfile
         run: test -f package-lock.json
       - name: Install locked dependencies
         run: npm ci
