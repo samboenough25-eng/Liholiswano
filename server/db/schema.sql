@@ -36,6 +36,19 @@ create table if not exists wallets (
   unique(user_id,id)
 );
 
+-- Normalize legacy wallet column names before creating current wallet indexes.
+do $
+begin
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='wallets' and column_name='wallet_address')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='wallets' and column_name='address') then
+    alter table wallets rename column wallet_address to address;
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='wallets' and column_name='wallet')
+     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='wallets' and column_name='address') then
+    alter table wallets rename column wallet to address;
+  end if;
+end $;
+
 -- Backward-compatible wallet migrations for databases created by earlier Liholiswano versions.
 -- CREATE TABLE IF NOT EXISTS does not modify an already-existing table.
 alter table wallets add column if not exists chain_id bigint not null default 97;
