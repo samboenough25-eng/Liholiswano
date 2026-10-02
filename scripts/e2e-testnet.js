@@ -6,8 +6,10 @@ const RPC = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet.bnbchain.org
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const CONTRACT = process.env.BNB_CONTRACT_ADDRESS || "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014";
 const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29";
-const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.002");
-const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.001");
+// Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
+// the test only needs enough tBNB for each temporary member's transactions.
+const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.00015");
+const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.0001");
 
 if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
 
@@ -78,6 +80,8 @@ async function main() {
   console.log("CONTRACT=" + CONTRACT);
   console.log("TOKEN=" + TOKEN);
   console.log("MEMBER_GAS_FUND_TBNB=" + ethers.formatEther(MEMBER_GAS_FUND));
+  console.log("OWNER_GAS_RESERVE_TBNB=" + ethers.formatEther(OWNER_GAS_RESERVE));
+  console.log("REQUIRED_MINIMUM_TBNB=" + ethers.formatEther(requiredFunding));
 
   const members = [
     ethers.Wallet.createRandom().connect(provider),
