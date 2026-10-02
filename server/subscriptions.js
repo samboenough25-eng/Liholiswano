@@ -67,7 +67,15 @@ async function prepareSubscriptionForUser(db, user) {
   );
   if (!wallet.rowCount) throw new Error("Primary verified BNB wallet required");
   const existing = await db.query("select * from subscription_payments where user_id=$1 and period_key=$2 limit 1",[user.id,period]);
-  if (existing.rowCount) return { payment: existing.rows[0], alreadyPaid: existing.rows[0].status === "confirmed", walletAddress: wallet.rows[0].address };
+  if (existing.rowCount) {
+    const existingPayment = existing.rows[0];
+    if (existingPayment.status === "confirmed") return { payment: existingPayment, alreadyPaid: true, walletAddress: wallet.rows[0].address };
+    if (String(existingPayment.wallet_address).toLowerCase() !== String(wallet.rows[0].address).toLowerCase()) {
+      await db.query("update subscription_payments set wallet_address=$2,updated_at=now() where id=$1",[existingPayment.id,wallet.rows[0].address]);
+      existingPayment.wallet_address=wallet.rows[0].address;
+    }
+    return { payment: existingPayment, alreadyPaid: false, walletAddress: wallet.rows[0].address };
+  }
   const key = makeSubscriptionKey(user.id, period);
   const ckey = customerKey(user.id);
   const rate = user.country === "BW" ? (process.env.SUBSCRIPTION_RATE_BW_P_PER_USD || null) : (process.env.SUBSCRIPTION_RATE_SZ_E_PER_USD || null);
