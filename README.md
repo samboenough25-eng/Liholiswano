@@ -88,3 +88,31 @@ A verified wallet proves wallet ownership but does not authorize arbitrary finan
 ### Transaction lifecycle
 
 Financial requests use explicit states: prepared, signed, submitted, confirmed, reverted, failed, cancelled, and reconciliation_required. A transaction is not marked successful merely because a request was created; receipt status, chain, sender, target contract, function and group are verified before confirmation.
+
+## Monthly platform subscription
+
+Every registered customer has a separate monthly platform-subscription account:
+- Botswana: P5.00/month
+- Eswatini: E5.00/month
+- payment asset: the configured BSC stablecoin
+- destination: the configured Liholiswano subscription treasury
+- ROSCA escrow and subscription revenue are separate accounting domains
+
+The fiat fee is not converted by a hard-coded arbitrary stablecoin value. The stablecoin base-unit amount must be configured explicitly per country, with an optional recorded FX-rate snapshot. The subscription vault contract emits a unique payment event and prevents replay of the same customer-period payment.
+
+The customer flow is:
+WhatsApp request -> explicit confirmation -> one-time wallet authorization link -> wallet signs -> blockchain receipt -> server verifies event -> WhatsApp confirms payment.
+
+The wallet authorization page is a signing surface only; it never asks for a seed phrase or private key. BNB Chain documentation confirms BSC is EVM-compatible and supports Binance Web3 Wallet, MetaMask and Trust Wallet, and Binance's current DApp testing guidance explicitly covers opening a DApp in the Binance Web3 Wallet browser and sending transactions. citeturn2search3turn1search0
+
+## Reconciliation and recovery
+
+The reconciliation worker now:
+- treats a protocol-contract change as a new reconciliation domain and explicitly classifies open findings from the superseded contract as historical/superseded;
+- verifies on-chain groups, members, escrow and indexed events;
+- recovers prepared/submitted transaction requests from confirmed blockchain events after an API failure;
+- reconciles subscription-vault events back into the subscription ledger;
+- retains unresolved discrepancies instead of hiding them;
+- uses finalized/safe block progress before advancing the reconciliation cursor.
+
+The known historical `missing_group` discrepancy belongs to the previous Testnet contract domain; it is not deleted silently. A fresh deployment starts a new reconciliation domain. New Testnet E2E groups that are intentionally created only for blockchain testing must still be registered/classified before they are treated as production application groups.
