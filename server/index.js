@@ -291,10 +291,11 @@ app.post("/api/transactions/record",auth,async(req,res)=>{
       await db().query("update transaction_requests set status='failed',tx_hash=$2,error_message=$3,updated_at=now() where id=$1",[requestId,txHash,"On-chain transaction reverted"]);
       return res.status(409).json({error:"On-chain transaction failed",txHash});
     }
-    const u=await db().query("update transaction_requests set status='confirmed',tx_hash=$2,updated_at=now(),confirmed_at=now(),error_message=null where id=$1 returning *",[requestId,txHash]);
-    await db().query("insert into blockchain_transactions(user_id,chain_id,tx_hash,contract_address,action,status,block_number,block_hash,payload,confirmed_at) values($1,$2,$3,$4,$5,'confirmed',$6,$7,$8,now()) on conflict(tx_hash) do nothing",[req.user.id,configuredChainId,txHash,request.contract_address,request.operation,receipt.blockNumber,receipt.blockHash,JSON.stringify({requestId,onchainGroupId:request.onchain_group_id})]);
-    await audit(req.user.id,"transaction.confirmed","transaction_request",requestId,{txHash,operation:request.operation});
-    res.json({request:u.rows[0]});
+    const u=await db().query("update transaction_requests set status='confirmed',tx_hash=$2,submitted_at=coalesce(submitted_at,now()),updated_at=now(),confirmed_at=now(),error_message=null where id=$1 returning *",[requestId,txHash]);
+    await db().query("insert into transaction_events(transaction_request_id,status,tx_hash,metadata) values($1,'confirmed',$2,$3)",[requestId,txHash,JSON.stringify({source:"direct_record",blockNumber:receipt.blockNumber})]);
+    await db().query("insert into blockchain_transactions(user_id,chain_id,tx_hash,contract_address,action,status,block_number,block_hash,payload,confirmed_at) values($1,$2,$3,$4,$5,'confirmed',$6,$7,$8,now()) on conflict(tx_hash) do nothing",[req.user.id,configuredChainId,txHash,request.contract_address,request.operation,receipt.blockNumber,receipt.blockHash,JSON.stringify({requestId,onchainGroupId:request.onchain_group_id,source:"direct_record"})]);
+    await audit(req.user.id,"transaction.confirmed","transaction_request",requestId,{txHash,operation:request.operation,source:"direct_record"});
+    res.json({request:u.rows[0],txHash});
   }catch(e){console.error("transaction record failed",e);res.status(500).json({error:"Unable to record transaction"});}
 });
 
