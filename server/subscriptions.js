@@ -201,6 +201,36 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
     } catch (e) { res.status(500).json({error:"Unable to load authorization request"}); }
   });
 
+  app.post("/api/whatsapp/authorization/:token/record", async (req,res) => {
+    const client=await db().connect();
+    try{
+      const raw=String(req.params.token||""),txHash=String(req.body.txHash||"");
+      if(!/^[a-f0-9]{64}$/.test(raw)||!/^0x[a-fA-F0-9]{64}$/.test(txHash))return res.status(400).json({error:"Authorization token and transaction hash are required"});
+      await client.query("begin");
+      const hash=crypto.createHash("sha256").update(raw).digest("hex");
+      const q=await client.query("select a.id,a.user_id,a.payment_id,a.expires_at,p.* from subscription_authorizations a join subscription_payments p on p.id=a.payment_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() for update",[hash]);
+      if(!q.rowCount){await client.query("rollback");return res.status(404).json({error:"Authorization link is invalid, expired, or already used"});}
+      const payment=q.rows[0];
+      if(payment.status==="confirmed"){await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.id]);await client.query("commit");return res.json({confirmed:true,payment});}
+      const p=provider(),network=await p.getNetwork();
+      if(Number(network.chainId)!==Number(payment.chain_id))throw new Error("Blockchain network mismatch");
+      const tx=await p.getTransaction(txHash),receipt=await p.getTransactionReceipt(txHash);
+      if(!tx||!receipt)throw new Error("Transaction is not confirmed yet");
+      if(String(tx.from).toLowerCase()!==String((await client.query("select address from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null limit 1",[payment.user_id,payment.chain_id])).rows[0]?.address||"").toLowerCase())throw new Error("Transaction sender does not match the verified wallet");
+      if(String(tx.to||"").toLowerCase()!==String(payment.subscription_contract).toLowerCase())throw new Error("Transaction target does not match the subscription contract");
+      if(receipt.status!==1)throw new Error("Subscription transaction reverted");
+      const iface=new ethers.Interface(SUBSCRIPTION_ABI);let matched=false;
+      for(const log of receipt.logs){try{const parsed=iface.parseLog(log);if(parsed&&parsed.name==="SubscriptionPaid"&&parsed.args.subscriptionKey.toLowerCase()===payment.subscription_key.toLowerCase()&&parsed.args.customerKey.toLowerCase()===payment.customer_key.toLowerCase()&&parsed.args.payer.toLowerCase()===tx.from.toLowerCase()&&parsed.args.token.toLowerCase()===payment.token_address.toLowerCase()&&parsed.args.amount===BigInt(payment.token_amount_base_units)&&Number(parsed.args.periodStart)===Math.floor(new Date(payment.period_start).getTime()/1000))matched=true;}catch{}}
+      if(!matched)throw new Error("Confirmed transaction does not contain the expected subscription event");
+      const u=await client.query("update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=now(),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning *",[payment.payment_id,txHash]);
+      await client.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed',$2)",[payment.payment_id,JSON.stringify({txHash,source:"whatsapp_authorization"})]);
+      await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.id]);
+      await client.query("commit");
+      try{await audit(payment.user_id,"subscription.payment_confirmed","subscription_payment",payment.payment_id,{txHash,source:"whatsapp_authorization"});}catch{}
+      res.json({confirmed:true,payment:u.rows[0],explorer:explorerTx(txHash)});
+    }catch(e){try{await client.query("rollback");}catch{}res.status(409).json({error:e.message||"Unable to verify subscription transaction"});}finally{client.release();}
+  });
+
   app.get("/api/admin/subscriptions", auth, requireRole(["admin","compliance","support"]), async (req, res) => {
     const q = await db().query("select s.*,u.email,u.country,u.phone from subscription_payments s join users u on u.id=s.user_id order by s.period_start desc,s.created_at desc limit 1000");
     res.json({ payments: q.rows });
