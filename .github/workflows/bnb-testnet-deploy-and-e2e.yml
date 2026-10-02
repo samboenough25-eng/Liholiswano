@@ -56,12 +56,15 @@ jobs:
           npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy-output.txt
           CONTRACT=$(grep '^LIHOLISWANO_CONTRACT=' deploy-output.txt | cut -d= -f2)
           TOKEN=$(grep '^TEST_TOKEN_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          SUBSCRIPTION=$(grep '^SUBSCRIPTION_CONTRACT=' deploy-output.txt | cut -d= -f2)
           test -n "$CONTRACT" || { echo "Protocol address missing from deployment output"; exit 1; }
           test -n "$TOKEN" || { echo "Token address missing from deployment output"; exit 1; }
           echo "BNB_CONTRACT_ADDRESS=$CONTRACT" >> "$GITHUB_ENV"
           echo "TEST_TOKEN_CONTRACT=$TOKEN" >> "$GITHUB_ENV"
+          echo "SUBSCRIPTION_CONTRACT_ADDRESS=$SUBSCRIPTION" >> "$GITHUB_ENV"
           echo "DEPLOYED_PROTOCOL=$CONTRACT" >> "$GITHUB_STEP_SUMMARY"
           echo "DEPLOYED_TEST_TOKEN=$TOKEN" >> "$GITHUB_STEP_SUMMARY"
+          echo "DEPLOYED_SUBSCRIPTION=$SUBSCRIPTION" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Run pause + full financial E2E against fresh deployment
         env:
