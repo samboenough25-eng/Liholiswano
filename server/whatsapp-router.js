@@ -11,6 +11,21 @@ async function handleCommand({phone,text,db}){
   const normalized=input.toLowerCase();
   const user=await userByPhone(db,phone);
 
+  if(normalized.startsWith("link ")){
+    const code=input.slice(5).trim();
+    if(!/^\\d{6}$/.test(code)) return "Use: LINK <6-digit code>.";
+    const crypto=require("crypto");
+    const hash=crypto.createHash("sha256").update(code).digest("hex");
+    const q=await db.query("select id,user_id from whatsapp_link_tokens where phone=$1 and token_hash=$2 and used_at is null and expires_at>now() order by created_at desc limit 1",[phone,hash]);
+    if(!q.rowCount) return "That linking code is invalid or expired. Start a new link request in your Liholiswano account.";
+    const conflict=await db.query("select id from users where lower(phone)=lower($1) and id<>$2 limit 1",[phone,q.rows[0].user_id]);
+    if(conflict.rowCount) return "This WhatsApp number is already linked to another account. Contact support.";
+    await db.query("update whatsapp_link_tokens set used_at=now() where id=$1",[q.rows[0].id]);
+    await db.query("update users set phone=$1,phone_verified_at=now(),updated_at=now() where id=$2",[phone,q.rows[0].user_id]);
+    await db.query("update whatsapp_contacts set user_id=$1,verified_at=now(),updated_at=now() where phone=$2",[q.rows[0].user_id,phone]);
+    return "Your WhatsApp number is now verified and linked to your Liholiswano account. Reply MENU to continue.";
+  }
+
   if(["hi","hello","menu","start"].includes(normalized)) return menu();
   if(!user) return "Your WhatsApp number is not linked to a Liholiswano account yet. Please complete account setup first.";
 
