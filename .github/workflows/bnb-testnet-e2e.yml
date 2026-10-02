@@ -29,6 +29,21 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Validate MetaMask deployer wallet secret
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          test -n "$DEPLOYER_PRIVATE_KEY" || {
+            echo "DEPLOYER_PRIVATE_KEY GitHub Actions secret is missing."
+            echo "Set it to the private key of the MetaMask wallet used as the BNB Testnet deployer/funder."
+            exit 1
+          }
+          node - <<'NODE'
+          const { Wallet } = require("ethers");
+          const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY);
+          console.log("MetaMask deployer wallet:", wallet.address);
+          NODE
+
       - name: Run controlled Testnet ROSCA cycle
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
@@ -36,5 +51,3 @@ jobs:
           BNB_CONTRACT_ADDRESS: "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014"
           TEST_TOKEN_CONTRACT: "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29"
         run: node scripts/e2e-testnet.js
-
-# YAML address values are quoted so GitHub parses them as strings.
