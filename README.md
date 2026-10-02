@@ -4,20 +4,26 @@
 
 The active product branch is `bnb-app-complete` and targets BNB Smart Chain. The Solidity contract is the financial authority for group membership, collateral, contributions, bids, deadlines, defaults, settlement and rotation. The browser is a client and does not hold treasury keys.
 
+This branch contains only the active BNB implementation. Obsolete blockchain implementations and duplicate staging packages are intentionally removed so there is one clear source of truth.
+
 ## Current validation
 
+- `npm run check:all`
 - `npm run compile`
 - `npm test`
 - `npm run e2e:local`
 - `npm run validate:web`
+- `npm run api:check`
 
 These checks are enforced by the BNB GitHub Actions workflow.
 
 ## Testnet
 
+Current network: BNB Smart Chain Testnet, chain ID 97.
+
 Actual BNB Testnet deployment requires a dedicated deployer wallet funded with tBNB. The private key belongs only in the GitHub Actions secret `DEPLOYER_PRIVATE_KEY`. Never use a production wallet or share a seed phrase.
 
-The Testnet deployment creates the Liholiswano protocol and an unrestricted MockUSDT test token. MockUSDT is Testnet-only and must never be used on Mainnet.
+The Testnet deployment creates the Liholiswano protocol and a Testnet-only MockUSDT token. MockUSDT is not USDT or USDC and must never be used on Mainnet.
 
 ## Security status
 
@@ -34,10 +40,10 @@ The current contract has been hardened with:
 
 The contract is still unaudited. CI success is not a security audit and is not approval for Mainnet or real-money operation.
 
-## Legacy material
-
-Older Stellar/Soroban source and documentation remain in this repository for historical reference. They are not the active BNB implementation. The obsolete Stellar GitHub workflows have been removed from this branch.
-
 ## Product-level work still required
 
-The active BNB repository is currently an on-chain/Testnet application foundation, not the entire regulated financial-service stack. Account management, KYC/AML provider integration, notifications, production backend/indexing, monitoring, reconciliation, customer support controls, and Botswana/Eswatini legal/compliance work still require separate implementation and verification.
+The active BNB repository is a Testnet financial application foundation, not yet the complete regulated financial-service stack. Remaining gates include production-grade indexing and financial reconciliation, wallet/custody integration, KYC/biometric and AML/compliance provider integrations, notification delivery, monitoring and incident controls, independent security review, production stablecoin configuration, and applicable Botswana/Eswatini legal and compliance preparation.
+
+## Source-of-truth rule
+
+The root Solidity contract, root Hardhat configuration, `server/`, `web/`, `scripts/`, and `.github/workflows/` are the active implementation. There is no second blockchain implementation in this branch.
