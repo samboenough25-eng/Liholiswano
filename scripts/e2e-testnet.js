@@ -1,10 +1,13 @@
-// BNB Testnet controlled E2E: this script uses test wallets and MockUSDT only.
+// BNB Testnet controlled E2E: test wallets + MockUSDT only.
+// This script never uses real USDT/USDC and must only run on BSC Testnet.
 const { ethers } = require("ethers");
 
 const RPC = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet.bnbchain.org";
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 const CONTRACT = process.env.BNB_CONTRACT_ADDRESS || "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014";
 const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29";
+const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.002");
+const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.001");
 
 if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
 
@@ -23,6 +26,7 @@ const appAbi = [
   "function contribute(bytes32)",
   "function submitBid(bytes32,uint256)",
   "function settleRound(bytes32)",
+  "function approvedToken(address) view returns (bool)",
   "function getMember(bytes32,address) view returns (address,bool,bool,bool,bool,bool,uint256,uint256,uint256,uint256)",
   "function protocolFeeBps() view returns (uint256)",
   "event GroupCreated(bytes32 indexed groupId,address indexed admin,address indexed token)",
@@ -46,10 +50,34 @@ async function main() {
   if (network.chainId !== 97n) throw new Error("Wrong chain: " + network.chainId);
 
   const balance = await provider.getBalance(owner.address);
-  if (balance === 0n) throw new Error("Deployer has no tBNB");
+  const requiredFunding = MEMBER_GAS_FUND * 3n + OWNER_GAS_RESERVE;
+  if (balance < requiredFunding) {
+    throw new Error(
+      "Insufficient deployer tBNB. Current=" + ethers.formatEther(balance) +
+      " required minimum=" + ethers.formatEther(requiredFunding) +
+      ". Fund the deployer wallet from the BSC Testnet faucet before rerunning."
+    );
+  }
+
+  const [appCode, tokenCode] = await Promise.all([
+    provider.getCode(CONTRACT),
+    provider.getCode(TOKEN)
+  ]);
+  if (appCode === "0x") throw new Error("BNB_CONTRACT_ADDRESS has no deployed code on BSC Testnet");
+  if (tokenCode === "0x") throw new Error("TEST_TOKEN_CONTRACT has no deployed code on BSC Testnet");
 
   const token = new ethers.Contract(TOKEN, tokenAbi, owner);
   const app = new ethers.Contract(CONTRACT, appAbi, owner);
+  if (!(await app.approvedToken(TOKEN))) {
+    throw new Error("Test token is not allowlisted by the deployed Liholiswano contract");
+  }
+
+  console.log("CHAIN_ID=97");
+  console.log("DEPLOYER=" + owner.address);
+  console.log("DEPLOYER_BALANCE_TBNB=" + ethers.formatEther(balance));
+  console.log("CONTRACT=" + CONTRACT);
+  console.log("TOKEN=" + TOKEN);
+  console.log("MEMBER_GAS_FUND_TBNB=" + ethers.formatEther(MEMBER_GAS_FUND));
 
   const members = [
     ethers.Wallet.createRandom().connect(provider),
@@ -57,9 +85,11 @@ async function main() {
     ethers.Wallet.createRandom().connect(provider)
   ];
 
-  const gasFund = ethers.parseEther("0.01");
   for (let i = 0; i < members.length; i++) {
-    await send("FUND_MEMBER_" + (i + 1), owner.sendTransaction({to: members[i].address, value: gasFund}));
+    await send("FUND_MEMBER_" + (i + 1), owner.sendTransaction({
+      to: members[i].address,
+      value: MEMBER_GAS_FUND
+    }));
   }
 
   const memberTokenAmount = ethers.parseUnits("200", 6);
@@ -73,8 +103,6 @@ async function main() {
   const groupId = ethers.keccak256(ethers.toUtf8Bytes("LIHOLISWANO-TESTNET-" + Date.now()));
 
   console.log("GROUP_ID=" + groupId);
-  console.log("CONTRACT=" + CONTRACT);
-  console.log("TOKEN=" + TOKEN);
   console.log("MEMBER_1=" + members[0].address);
   console.log("MEMBER_2=" + members[1].address);
   console.log("MEMBER_3=" + members[2].address);
@@ -104,8 +132,12 @@ async function main() {
   const feeBps = await app.protocolFeeBps();
   const expectedPayout = ethers.parseUnits("255", 6);
 
-  if (payout !== expectedPayout) throw new Error("Unexpected winner payout: " + ethers.formatUnits(payout, 6));
-  if (member[6] !== 1n) throw new Error("Winner totalWins mismatch: " + member[6]);
+  if (payout !== expectedPayout) {
+    throw new Error("Unexpected winner payout: " + ethers.formatUnits(payout, 6));
+  }
+  if (member[6] !== 1n) {
+    throw new Error("Winner totalWins mismatch: " + member[6]);
+  }
 
   console.log("SETTLEMENT_TX=" + settlement.hash);
   console.log("WINNER=" + members[1].address);
