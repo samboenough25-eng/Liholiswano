@@ -7,7 +7,7 @@ const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
 const RPC=process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const EXPECTED_CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
-const MAX_RANGE=Number(process.env.INDEXER_MAX_BLOCK_RANGE||1000);
+const MAX_RANGE=Number(process.env.INDEXER_MAX_BLOCK_RANGE||100);
 const INITIAL_LOOKBACK=Number(process.env.INDEXER_INITIAL_LOOKBACK||5000);
 const START_BLOCK=process.env.INDEXER_START_BLOCK==null||process.env.INDEXER_START_BLOCK===""?null:Number(process.env.INDEXER_START_BLOCK);
 
@@ -92,7 +92,25 @@ async function verifyCursor(state){
 }
 async function indexRange(chainId,contractAddress,fromBlock,toBlock){
   if(fromBlock>toBlock) return {logs:0,inserted:0,eventsByName:{}};
-  const logs=await rpc.getLogs({address:contractAddress,fromBlock,toBlock});
+  let logs;
+  let attempt=0;
+  let rangeFrom=fromBlock;
+  let rangeTo=toBlock;
+  while(true){
+    try{
+      logs=await rpc.getLogs({address:contractAddress,fromBlock:rangeFrom,toBlock:rangeTo});
+      break;
+    }catch(error){
+      const message=String(error?.shortMessage||error?.message||error);
+      const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
+      if(!retryable||attempt>=4) throw error;
+      attempt++;
+      if(rangeFrom<rangeTo){
+        rangeTo=rangeFrom+Math.max(0,Math.floor((rangeTo-rangeFrom)/2));
+      }
+      await new Promise(resolve=>setTimeout(resolve,Math.min(8000,500*Math.pow(2,attempt))));
+    }
+  }
   let inserted=0; const eventsByName={};
   for(const log of logs){
     let parsed;
