@@ -188,7 +188,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
       const raw = String(req.params.token || "");
       if (!/^[a-f0-9]{64}$/.test(raw)) return res.status(400).json({error:"Invalid authorization token"});
       const hash = crypto.createHash("sha256").update(raw).digest("hex");
-      const q = await db().query("select a.id,a.payment_id,a.user_id,a.expires_at,p.period_key,p.currency,p.fiat_amount_minor,p.token_address,p.token_amount_base_units,p.token_decimals,p.chain_id,p.subscription_contract,p.subscription_key,p.customer_key,u.phone from subscription_authorizations a join subscription_payments p on p.id=a.payment_id join users u on u.id=a.user_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() limit 1",[hash]);
+      const q = await db().query("select a.id as authorization_id,a.payment_id,a.user_id,a.expires_at,p.period_key,p.currency,p.fiat_amount_minor,p.token_address,p.token_amount_base_units,p.token_decimals,p.chain_id,p.subscription_contract,p.subscription_key,p.customer_key,u.phone from subscription_authorizations a join subscription_payments p on p.id=a.payment_id join users u on u.id=a.user_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() limit 1",[hash]);
       if (!q.rowCount) return res.status(404).json({error:"Authorization link is invalid or expired"});
       const x=q.rows[0];
       res.json({
@@ -208,10 +208,10 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
       if(!/^[a-f0-9]{64}$/.test(raw)||!/^0x[a-fA-F0-9]{64}$/.test(txHash))return res.status(400).json({error:"Authorization token and transaction hash are required"});
       await client.query("begin");
       const hash=crypto.createHash("sha256").update(raw).digest("hex");
-      const q=await client.query("select a.id,a.user_id,a.payment_id,a.expires_at,p.* from subscription_authorizations a join subscription_payments p on p.id=a.payment_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() for update",[hash]);
+      const q=await client.query("select a.id as authorization_id,a.user_id,a.payment_id,a.expires_at,p.* from subscription_authorizations a join subscription_payments p on p.id=a.payment_id where a.token_hash=$1 and a.used_at is null and a.expires_at>now() for update",[hash]);
       if(!q.rowCount){await client.query("rollback");return res.status(404).json({error:"Authorization link is invalid, expired, or already used"});}
       const payment=q.rows[0];
-      if(payment.status==="confirmed"){await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.id]);await client.query("commit");return res.json({confirmed:true,payment});}
+      if(payment.status==="confirmed"){await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.authorization_id]);await client.query("commit");return res.json({confirmed:true,payment});}
       const p=provider(),network=await p.getNetwork();
       if(Number(network.chainId)!==Number(payment.chain_id))throw new Error("Blockchain network mismatch");
       const tx=await p.getTransaction(txHash),receipt=await p.getTransactionReceipt(txHash);
