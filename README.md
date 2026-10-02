@@ -103,7 +103,7 @@ The fiat fee is not converted by a hard-coded arbitrary stablecoin value. The st
 The customer flow is:
 WhatsApp request -> explicit confirmation -> one-time wallet authorization link -> wallet signs -> blockchain receipt -> server verifies event -> WhatsApp confirms payment.
 
-The wallet authorization page is a signing surface only; it never asks for a seed phrase or private key. BNB Chain documentation confirms BSC is EVM-compatible and supports Binance Web3 Wallet, MetaMask and Trust Wallet, and Binance's current DApp testing guidance explicitly covers opening a DApp in the Binance Web3 Wallet browser and sending transactions. citeturn2search3turn1search0
+The wallet authorization page is a signing surface only; it never asks for a seed phrase or private key. BNB Chain documentation confirms BSC is EVM-compatible and supports Binance Web3 Wallet, MetaMask and Trust Wallet, and Binance's current DApp testing guidance explicitly covers opening a DApp in the Binance Web3 Wallet browser and sending transactions.
 
 ## Reconciliation and recovery
 
