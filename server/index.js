@@ -199,7 +199,32 @@ app.post("/api/admin/reconciliation/discrepancies/:id/resolve",auth,requireRole(
 
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 app.get("/api/transactions/requests",auth,async(req,res)=>{const q=await db().query("select id,operation,wallet_address,chain_id,contract_address,onchain_group_id,status,tx_hash,request_json,error_message,created_at,updated_at,confirmed_at from transaction_requests where user_id=$1 order by created_at desc limit 100",[req.user.id]);res.json({requests:q.rows})});
-app.post("/api/transactions/prepare",auth,async(req,res)=>{try{if((req.user.kyc_status!=="approved" || req.user.kyc_decision_source==="manual_stage_a"))return res.status(403).json({error:"KYC approval is required"});const b=req.body||{},operation=String(b.operation||"").trim(),onchainGroupId=String(b.onchainGroupId||"").trim(),key=String(req.headers["idempotency-key"]||b.idempotencyKey||"").trim();if(!["join","contribute","bid"].includes(operation)||!onchainGroupId||key.length<8||key.length>255)return res.status(400).json({error:"operation, onchainGroupId and a valid Idempotency-Key are required"});const prior=await db().query("select response from idempotency_keys where key=$1 and user_id=$2",[key,req.user.id]);if(prior.rowCount)return res.json(prior.rows[0].response);const w=await db().query("select address from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null",[req.user.id,configuredChainId]);if(!w.rowCount)return res.status(400).json({error:"Primary BNB wallet required"});const contractAddress=String(process.env.BNB_CONTRACT_ADDRESS||"");if(!/^0x[a-f-f0-9]{40}$/i.test(contractAddress))return res.status(503).json({error:"BNB contract is not configured"});const g=await db().query("select id from groups where onchain_group_id=$1",[onchainGroupId]);const request={operation,onchainGroupId,walletAddress:w.rows[0].address,chainId:configuredChainId,contractAddress,status:"prepared"};const ins=await db().query("insert into transaction_requests(user_id,group_id,operation,idempotency_key,wallet_address,chain_id,contract_address,onchain_group_id,request_json) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id,operation,status,onchain_group_id,wallet_address,chain_id,contract_address,created_at", [req.user.id,g.rowCount?g.rows[0].id:null,operation,key,w.rows[0].address,request.chainId,contractAddress,onchainGroupId,JSON.stringify(request)]);const response={request:ins.rows[0],signingStatus:"not_configured"};await db().query("insert into idempotency_keys(key,user_id,operation,response) values($1,$2,$3,$4)",[key,req.user.id,operation,JSON.stringify(response)]);await audit(req.user.id,"transaction.prepared","transaction_request",ins.rows[0].id,{operation,onchainGroupId});res.status(201).json(response);}catch(e){console.error(e);res.status(400).json({error:"Unable to prepare transaction request"})}});
+app.post("/api/transactions/prepare",auth,async(req,res)=>{
+  try{
+    if((req.user.kyc_status!=="approved"||req.user.kyc_decision_source==="manual_stage_a"))return res.status(403).json({error:"KYC approval is required"});
+    const b=req.body||{},operation=String(b.operation||"").trim(),onchainGroupId=String(b.onchainGroupId||"").trim(),key=String(req.headers["idempotency-key"]||b.idempotencyKey||"").trim();
+    if(!["join","contribute","bid"].includes(operation)||!/^0x[a-fA-F0-9]{64}$/.test(onchainGroupId)||key.length<8||key.length>255)return res.status(400).json({error:"operation, onchainGroupId and a valid Idempotency-Key are required"});
+    let bidBps=null;
+    if(operation==="bid"){
+      const n=Number(b.bidBps);
+      if(!Number.isInteger(n)||n<0||n>5000)return res.status(400).json({error:"bidBps must be an integer from 0 to 5000"});
+      bidBps=n;
+    }
+    const prior=await db().query("select response from idempotency_keys where key=$1 and user_id=$2",[key,req.user.id]);
+    if(prior.rowCount)return res.json(prior.rows[0].response);
+    const w=await db().query("select address from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null",[req.user.id,configuredChainId]);
+    if(!w.rowCount)return res.status(400).json({error:"Primary BNB wallet required"});
+    const contractAddress=String(process.env.BNB_CONTRACT_ADDRESS||"");
+    if(!/^0x[a-fA-F0-9]{40}$/i.test(contractAddress))return res.status(503).json({error:"BNB contract is not configured"});
+    const g=await db().query("select id from groups where onchain_group_id=$1",[onchainGroupId]);
+    const request={operation,onchainGroupId,walletAddress:w.rows[0].address,chainId:configuredChainId,contractAddress,status:"prepared",bidBps};
+    const ins=await db().query("insert into transaction_requests(user_id,group_id,operation,idempotency_key,wallet_address,chain_id,contract_address,onchain_group_id,request_json) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id,operation,status,onchain_group_id,wallet_address,chain_id,contract_address,created_at",[req.user.id,g.rowCount?g.rows[0].id:null,operation,key,w.rows[0].address,request.chainId,contractAddress,onchainGroupId,JSON.stringify(request)]);
+    const response={request:ins.rows[0],signingStatus:"not_configured"};
+    await db().query("insert into idempotency_keys(key,user_id,operation,response) values($1,$2,$3,$4)",[key,req.user.id,operation,JSON.stringify(response)]);
+    await audit(req.user.id,"transaction.prepared","transaction_request",ins.rows[0].id,{operation,onchainGroupId,bidBps});
+    res.status(201).json(response);
+  }catch(e){console.error(e);res.status(400).json({error:"Unable to prepare transaction request"});}
+});
 
 app.post("/api/transactions/signing-status",auth,async(req,res)=>{
   const requestId=String(req.body.requestId||"").trim();
