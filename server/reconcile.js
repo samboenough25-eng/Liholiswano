@@ -147,7 +147,7 @@ async function run(){
    for(const [key,name] of indexedFacts){if(!chainFacts.has(key))add(discrepancies,"indexer_orphan_event","chain_event",key,{presentOnChain:true},{eventName:name});}
    const facts=await pool.query("select tx_hash,log_index,event_name,args,block_number from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4 order by block_number,log_index",[CHAIN_ID,CONTRACT,from,safe]);
    const tokenCache=new Map();
-   for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`${ev.tx_hash}:${ev.log_index}`,{projectable:true},{error:e.message});}}
+   for(const ev of facts.rows){try{await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){console.error(JSON.stringify({service:"liholiswano-reconciliation",status:"projection_error",txHash:ev.tx_hash,logIndex:ev.log_index,eventName:ev.event_name,error:e.message}));add(discrepancies,"projection_error","chain_event",`${ev.tx_hash}:${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
    for(const d of discrepancies)await pool.query("insert into reconciliation_discrepancies(run_id,severity,category,entity_type,entity_key,expected,actual) values($1,$2,$3,$4,$5,$6,$7)",
     [runId,d.severity,d.category,d.entityType,d.entityKey,JSON.stringify(d.expected),JSON.stringify(d.actual)]);
    const status=discrepancies.some(x=>x.severity==="critical")?"failed":discrepancies.length?"warning":"completed";
