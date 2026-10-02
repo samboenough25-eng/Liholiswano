@@ -16,7 +16,9 @@
     "indexer:check": "node server/indexer.js",
     "api:smoke": "node scripts/api-smoke.js",
     "check:js": "node scripts/check-js.js",
-    "check:all": "npm run check:js && npm run api:check && npm run compile && npm test && npm run e2e:local && npm run validate:web"
+    "check:all": "npm run check:js && npm run api:check && npm run compile && npm test && npm run e2e:local && npm run validate:web",
+    "reconcile:testnet": "node server/reconcile.js",
+    "ops:check": "npm run api:check && node --check server/indexer.js && node --check server/reconcile.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
