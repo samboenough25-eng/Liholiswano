@@ -7,7 +7,7 @@ const { createTransactionAuthorization } = require("./transaction-authorization"
 
 async function userByPhone(db, phone) {
   const q = await db.query(
-    "select id,email,country,phone,phone_verified_at,kyc_status from users where phone=$1",
+    "select id,email,country,phone,phone_verified_at,kyc_status,(select decision_source from kyc_cases where user_id=users.id order by created_at desc limit 1) as kyc_decision_source from users where phone=$1",
     [phone]
   );
   return q.rows[0] || null;
