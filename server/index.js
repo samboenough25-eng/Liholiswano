@@ -14,6 +14,7 @@ const jwt=require("jsonwebtoken");
 const {Pool}=require("pg");
 const {normalizePhone,verifySignature,normalizeInbound,menu,sendText}=require("./whatsapp");
 const {handleCommand}=require("./whatsapp-router");
+const {installStageAKyc}=require("./kyc-stage-a");
 
 const app=express();
 const port=Number(process.env.PORT||3000);
@@ -28,7 +29,7 @@ const pool=process.env.DATABASE_URL?new Pool({
 app.set("trust proxy",1);
 app.use(helmet());
 app.use(cors({origin:process.env.CORS_ORIGIN?process.env.CORS_ORIGIN.split(",").map(s=>s.trim()):true,credentials:false}));
-app.use(express.json({limit:"100kb",verify:(req,res,buf)=>{if(req.path==="/api/whatsapp/webhook")req.rawBody=Buffer.from(buf);}}));
+app.use(express.json({limit:"100kb",verify:(req,res,buf)=>{if(req.path==="/api/whatsapp/webhook" || req.path==="/api/kyc/webhook")req.rawBody=Buffer.from(buf);}}));
 app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,legacyHeaders:false}));
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
@@ -277,6 +278,8 @@ app.post("/api/groups",auth,async(req,res)=>{if(req.user.kyc_status!=="approved"
 
 app.get("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(req,res)=>{const q=await db().query("select s.id,s.user_id,s.provider,s.screening_type,s.status,s.provider_reference,s.result_json,s.reviewed_at,s.created_at,u.email from compliance_screenings s join users u on u.id=s.user_id order by s.created_at desc limit 500");res.json({screenings:q.rows})});
 app.post("/api/admin/screenings",auth,requireRole(["admin","compliance"]),async(req,res)=>{const uid=String(req.body.userId||""),type=String(req.body.screeningType||""),status=String(req.body.status||"pending");if(!uid||!["sanctions","pep","adverse_media","risk"].includes(type)||!["pending","clear","match","review","error"].includes(status))return res.status(400).json({error:"Invalid screening"});const q=await db().query("insert into compliance_screenings(user_id,provider,screening_type,status,provider_reference,result_json) values($1,$2,$3,$4,$5,$6) returning *",[uid,String(req.body.provider||process.env.COMPLIANCE_PROVIDER||"manual"),type,status,req.body.providerReference||null,JSON.stringify(req.body.result||{})]);await audit(req.user.id,"compliance.screening_created","screening",q.rows[0].id,{type,status});res.status(201).json({screening:q.rows[0]})});
+
+installStageAKyc({app,db,auth,requireRole,audit});
 
 app.use((err,req,res,next)=>{console.error(err);res.status(500).json({error:"Internal server error"});});
 function startBackgroundWorker(name,script,intervalMs){
