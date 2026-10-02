@@ -224,7 +224,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
       if(!matched)throw new Error("Confirmed transaction does not contain the expected subscription event");
       const u=await client.query("update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=now(),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning *",[payment.payment_id,txHash]);
       await client.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed',$2)",[payment.payment_id,JSON.stringify({txHash,source:"whatsapp_authorization"})]);
-      await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.id]);
+      await client.query("update subscription_authorizations set used_at=now() where id=$1",[payment.authorization_id]);
       await client.query("commit");
       try{await audit(payment.user_id,"subscription.payment_confirmed","subscription_payment",payment.payment_id,{txHash,source:"whatsapp_authorization"});}catch{}
       res.json({confirmed:true,payment:u.rows[0],explorer:explorerTx(txHash)});
