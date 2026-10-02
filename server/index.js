@@ -258,6 +258,13 @@ app.get("/api/admin/audit",auth,requireRole(["admin","compliance"]),async(req,re
 
 
 
+app.get("/api/compliance/status",auth,async(req,res)=>{
+  const q=await db().query("select screening_type,status,provider_reference,reviewed_at,created_at from compliance_screenings where user_id=$1 order by created_at desc",[req.user.id]);
+  const latest={};
+  for(const row of q.rows)if(!latest[row.screening_type])latest[row.screening_type]={status:row.status,reviewedAt:row.reviewed_at,createdAt:row.created_at};
+  res.json({kycStatus:req.user.kyc_status,screenings:latest,providerConfigured:!!process.env.COMPLIANCE_API_URL&&!!process.env.COMPLIANCE_API_KEY});
+});
+
 app.get("/api/notifications",auth,async(req,res)=>{const q=await db().query("select id,channel,template,subject,body,status,scheduled_at,sent_at,created_at from notifications where user_id=$1 order by created_at desc limit 100",[req.user.id]);res.json({notifications:q.rows})});
 app.post("/api/support/tickets",auth,async(req,res)=>{const subject=String(req.body.subject||"").slice(0,200),description=String(req.body.description||"").slice(0,5000),priority=String(req.body.priority||"normal");if(subject.length<2||description.length<2||!["low","normal","high","urgent"].includes(priority))return res.status(400).json({error:"Invalid support ticket"});const q=await db().query("insert into support_tickets(user_id,subject,description,priority) values($1,$2,$3,$4) returning *",[req.user.id,subject,description,priority]);await audit(req.user.id,"support.ticket_created","support_ticket",q.rows[0].id);res.status(201).json({ticket:q.rows[0]})});
 app.get("/api/support/tickets",auth,async(req,res)=>{const q=await db().query("select id,subject,description,status,priority,assigned_to,created_at,updated_at from support_tickets where user_id=$1 order by created_at desc",[req.user.id]);res.json({tickets:q.rows})});
