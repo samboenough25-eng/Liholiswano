@@ -100,11 +100,18 @@ app.post("/api/whatsapp/webhook",async(req,res)=>{
     const existing=await db().query("select id from whatsapp_messages where provider_message_id=$1",[msg.messageId]);
     if(existing.rowCount) return res.sendStatus(200);
     await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'inbound','text',$3,'received')",[contactId,msg.messageId,msg.text]);
-    const reply=await handleCommand({phone,text:msg.text,db:db()});
+    const reply=await handleCommand({phone,text:msg.text,db:db(),contactId});
     const outbound=await sendText({to:phone,text:reply});
     if(outbound.status==="sent") await db().query("insert into whatsapp_messages(contact_id,provider_message_id,direction,message_type,body,status) values($1,$2,'outbound','text',$3,'sent')",[contactId,"local:"+msg.messageId,reply]);
     res.sendStatus(200);
   }catch(e){console.error("WhatsApp webhook error",e);res.sendStatus(500);}
+});
+
+app.get("/api/whatsapp/customer-status",auth,async(req,res)=>{
+  const phone=req.user.phone;
+  if(!phone) return res.json({linked:false,phone:null,message:"Add a phone number to link WhatsApp."});
+  const q=await db().query("select phone,verified_at,last_seen_at from whatsapp_contacts where phone=$1 limit 1",[phone]);
+  res.json({linked:!!q.rowCount&&!!q.rows[0].verified_at,phone,verifiedAt:q.rows[0]?.verified_at||null,lastSeenAt:q.rows[0]?.last_seen_at||null,providerConfigured:!!process.env.WHATSAPP_API_URL&&!!process.env.WHATSAPP_ACCESS_TOKEN});
 });
 
 app.get("/api/system/status",auth,requireRole(["admin","compliance","support"]),async(req,res)=>{let chain={status:"not_configured"};try{const {chainInfo}=require("./blockchain");chain=await chainInfo();}catch(e){chain={status:"error",message:String(e.message).slice(0,200)}}res.json({api:"ok",database:pool?"configured":"not_configured",whatsapp:Boolean(process.env.WHATSAPP_API_URL&&process.env.WHATSAPP_ACCESS_TOKEN),kyc:Boolean(process.env.KYC_PROVIDER),compliance:Boolean(process.env.COMPLIANCE_API_URL&&process.env.COMPLIANCE_API_KEY),walletMode:process.env.WALLET_MODE||"managed",chain});});
