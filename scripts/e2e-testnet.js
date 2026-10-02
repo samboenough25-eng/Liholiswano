@@ -8,8 +8,8 @@ const CONTRACT = process.env.BNB_CONTRACT_ADDRESS || "0xe9b104260c940fAE26a73e4E
 const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29";
 // Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
 // the test only needs enough tBNB for each temporary member's transactions.
-const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.00015");
-const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.0001");
+const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.00005");
+const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.00005");
 
 if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
 
