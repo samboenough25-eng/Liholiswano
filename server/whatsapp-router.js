@@ -234,7 +234,7 @@ async function handleCommand({ phone, text, db, contactId }) {
       return ["Monthly subscription","Due: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Status: "+(s.alreadyPaid?"PAID":s.payment.status.toUpperCase()),"Stablecoin amount is configured by the platform."].join("\n");
     } catch(e) { return "Subscription is not configured yet: "+String(e.message||e); }
   }
-  if (normalized === "pay") {
+  if (normalized === "pay" || normalized === "10") {
     try {
       const s=await prepareSubscriptionForUser(db,user);
       if(s.alreadyPaid) return "Your subscription for "+s.payment.period_key+" is already paid.";
