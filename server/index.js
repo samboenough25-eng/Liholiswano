@@ -1,7 +1,7 @@
 require("dotenv").config();
 const fs=require("fs");
 const crypto=require("crypto");
-const {verifyMessage}=require("ethers");
+const {verifyMessage,Interface}=require("ethers");
 const path=require("path");
 const express=require("express");
 const {spawn}=require("child_process");
@@ -189,6 +189,40 @@ app.post("/api/admin/reconciliation/discrepancies/:id/resolve",auth,requireRole(
 app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 app.get("/api/transactions/requests",auth,async(req,res)=>{const q=await db().query("select id,operation,wallet_address,chain_id,contract_address,onchain_group_id,status,tx_hash,request_json,error_message,created_at,updated_at,confirmed_at from transaction_requests where user_id=$1 order by created_at desc limit 100",[req.user.id]);res.json({requests:q.rows})});
 app.post("/api/transactions/prepare",auth,async(req,res)=>{try{if(req.user.kyc_status!=="approved")return res.status(403).json({error:"KYC approval is required"});const b=req.body||{},operation=String(b.operation||"").trim(),onchainGroupId=String(b.onchainGroupId||"").trim(),key=String(req.headers["idempotency-key"]||b.idempotencyKey||"").trim();if(!["join","contribute","bid"].includes(operation)||!onchainGroupId||key.length<8||key.length>255)return res.status(400).json({error:"operation, onchainGroupId and a valid Idempotency-Key are required"});const prior=await db().query("select response from idempotency_keys where key=$1 and user_id=$2",[key,req.user.id]);if(prior.rowCount)return res.json(prior.rows[0].response);const w=await db().query("select address from wallets where user_id=$1 and chain_id=$2 and is_primary=true and verified_at is not null",[req.user.id,configuredChainId]);if(!w.rowCount)return res.status(400).json({error:"Primary BNB wallet required"});const contractAddress=String(process.env.BNB_CONTRACT_ADDRESS||"");if(!/^0x[a-f-f0-9]{40}$/i.test(contractAddress))return res.status(503).json({error:"BNB contract is not configured"});const g=await db().query("select id from groups where onchain_group_id=$1",[onchainGroupId]);const request={operation,onchainGroupId,walletAddress:w.rows[0].address,chainId:configuredChainId,contractAddress,status:"prepared"};const ins=await db().query("insert into transaction_requests(user_id,group_id,operation,idempotency_key,wallet_address,chain_id,contract_address,onchain_group_id,request_json) values($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id,operation,status,onchain_group_id,wallet_address,chain_id,contract_address,created_at", [req.user.id,g.rowCount?g.rows[0].id:null,operation,key,w.rows[0].address,request.chainId,contractAddress,onchainGroupId,JSON.stringify(request)]);const response={request:ins.rows[0],signingStatus:"not_configured"};await db().query("insert into idempotency_keys(key,user_id,operation,response) values($1,$2,$3,$4)",[key,req.user.id,operation,JSON.stringify(response)]);await audit(req.user.id,"transaction.prepared","transaction_request",ins.rows[0].id,{operation,onchainGroupId});res.status(201).json(response);}catch(e){console.error(e);res.status(400).json({error:"Unable to prepare transaction request"})}});
+
+app.post("/api/transactions/record",auth,async(req,res)=>{
+  try{
+    const requestId=String(req.body.requestId||"").trim(),txHash=String(req.body.txHash||"").trim();
+    if(!requestId||!/^0x[a-fA-F0-9]{64}$/.test(txHash))return res.status(400).json({error:"requestId and a valid transaction hash are required"});
+    const q=await db().query("select * from transaction_requests where id=$1 and user_id=$2",[requestId,req.user.id]);
+    if(!q.rowCount)return res.status(404).json({error:"Transaction request not found"});
+    const request=q.rows[0];
+    if(request.status==="confirmed"&&request.tx_hash===txHash)return res.json({request});
+    if(request.status!=="prepared"&&request.status!=="submitted")return res.status(409).json({error:"Transaction request is no longer recordable"});
+    const {provider}=require("./blockchain");
+    const p=provider();
+    const receipt=await p.getTransactionReceipt(txHash);
+    if(!receipt)return res.status(409).json({error:"Transaction is not yet mined"});
+    const tx=await p.getTransaction(txHash);
+    if(!tx)return res.status(409).json({error:"Transaction not found"});
+    if(Number(tx.chainId)!==configuredChainId)return res.status(400).json({error:"Transaction was sent on the wrong network"});
+    if(String(tx.to||"").toLowerCase()!==request.contract_address.toLowerCase())return res.status(400).json({error:"Transaction target does not match the Liholiswano contract"});
+    if(String(tx.from||"").toLowerCase()!==request.wallet_address.toLowerCase())return res.status(403).json({error:"Transaction sender does not match the verified wallet"});
+    const iface=new Interface(["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)"]);
+    let parsed;try{parsed=iface.parseTransaction({data:tx.data,value:tx.value});}catch{parsed=null;}
+    if(!parsed||parsed.name!==({join:"joinGroup",contribute:"contribute",bid:"submitBid"}[request.operation]))return res.status(400).json({error:"Transaction function does not match the prepared operation"});
+    const groupArg=String(parsed.args[0]);
+    if(groupArg.toLowerCase()!==request.onchain_group_id.toLowerCase())return res.status(400).json({error:"Transaction group does not match the prepared request"});
+    if(Number(receipt.status)!==1){
+      await db().query("update transaction_requests set status='failed',tx_hash=$2,error_message=$3,updated_at=now() where id=$1",[requestId,txHash,"On-chain transaction reverted"]);
+      return res.status(409).json({error:"On-chain transaction failed",txHash});
+    }
+    const u=await db().query("update transaction_requests set status='confirmed',tx_hash=$2,updated_at=now(),confirmed_at=now(),error_message=null where id=$1 returning *",[requestId,txHash]);
+    await db().query("insert into blockchain_transactions(user_id,chain_id,tx_hash,contract_address,action,status,block_number,block_hash,payload,confirmed_at) values($1,$2,$3,$4,$5,'confirmed',$6,$7,$8,now()) on conflict(tx_hash) do nothing",[req.user.id,configuredChainId,txHash,request.contract_address,request.operation,receipt.blockNumber,receipt.blockHash,JSON.stringify({requestId,onchainGroupId:request.onchain_group_id})]);
+    await audit(req.user.id,"transaction.confirmed","transaction_request",requestId,{txHash,operation:request.operation});
+    res.json({request:u.rows[0]});
+  }catch(e){console.error("transaction record failed",e);res.status(500).json({error:"Unable to record transaction"});}
+});
 
 app.get("/api/me/eligibility",auth,async(req,res)=>{
   const restricted=req.user.kyc_status==="approved";
