@@ -9,4 +9,8 @@ if(!html.includes('src="./config.js"'))throw new Error("web/config.js is not loa
 if(!html.includes("ethers.umd.min.js"))throw new Error("ethers v6 browser bundle is not loaded");
 const requiredIds=["connect","network","refreshWallet","wallet","contract","token","save","verify","deploymentState","approveToken","adminApprove","gid","create","lock","groupView","load","groups","join","approveContribution","contribute","bid","submit","settle","defaultMember","markDefault","log"];
 for(const id of requiredIds)if(!html.includes(`id="${id}"`))throw new Error(`Missing required UI element: ${id}`);
-const register=fs.readFileSync("web/register.html","utf8");\nconst registerScripts=[...register.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(s=>s.trim());\nfor(let i=0;i<registerScripts.length;i++)new vm.Script(registerScripts[i],{filename:"web/register.html#script"+(i+1)});\nfor(const id of ["email","password","country","register","verification","code","verify","resend"])if(!register.includes(`id="${id}"`))throw new Error(`Registration UI missing ${id}`);\nconsole.log("WEB_STATIC_VALIDATION=PASS");
+const register=fs.readFileSync("web/register.html","utf8");
+const registerScripts=[...register.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(s=>s.trim());
+for(let i=0;i<registerScripts.length;i++)new vm.Script(registerScripts[i],{filename:"web/register.html#script"+(i+1)});
+for(const id of ["email","password","country","register","verification","code","verify","resend"])if(!register.includes(`id="${id}"`))throw new Error(`Registration UI missing ${id}`);
+console.log("WEB_STATIC_VALIDATION=PASS");
