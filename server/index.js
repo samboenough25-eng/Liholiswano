@@ -257,6 +257,10 @@ app.post("/api/transactions/record",auth,async(req,res)=>{
     if(!parsed||parsed.name!==({join:"joinGroup",contribute:"contribute",bid:"submitBid"}[request.operation]))return res.status(400).json({error:"Transaction function does not match the prepared operation"});
     const groupArg=String(parsed.args[0]);
     if(groupArg.toLowerCase()!==request.onchain_group_id.toLowerCase())return res.status(400).json({error:"Transaction group does not match the prepared request"});
+    if(request.operation==="bid"){
+      const expected=Number((request.request_json||{}).bidBps);
+      if(!Number.isInteger(expected)||Number(parsed.args[1])!==expected)return res.status(400).json({error:"Bid amount does not match the prepared request"});
+    }
     if(Number(receipt.status)!==1){
       await db().query("update transaction_requests set status='failed',tx_hash=$2,error_message=$3,updated_at=now() where id=$1",[requestId,txHash,"On-chain transaction reverted"]);
       return res.status(409).json({error:"On-chain transaction failed",txHash});
