@@ -255,6 +255,7 @@ async function start(){
   }
   app.listen(port,()=>console.log("Liholiswano API listening on port "+port));
   if(process.env.ENABLE_TESTNET_INDEXER_WORKER==="true") startBackgroundWorker("indexer","indexer.js",Number(process.env.INDEXER_INTERVAL_MS||15000));
-  if(process.env.ENABLE_TESTNET_KEEPER_WORKER==="true") startBackgroundWorker("keeper","keeper.js",Number(process.env.KEEPER_INTERVAL_MS||300000));\n  if(process.env.ENABLE_TESTNET_RECONCILIATION_WORKER==="true") startBackgroundWorker("reconciliation","reconcile.js",Number(process.env.RECONCILIATION_INTERVAL_MS||900000));
+  if(process.env.ENABLE_TESTNET_KEEPER_WORKER==="true") startBackgroundWorker("keeper","keeper.js",Number(process.env.KEEPER_INTERVAL_MS||300000));
+  if(process.env.ENABLE_TESTNET_RECONCILIATION_WORKER==="true") startBackgroundWorker("reconciliation","reconcile.js",Number(process.env.RECONCILIATION_INTERVAL_MS||900000));
 }
 start();
