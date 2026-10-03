@@ -59,13 +59,16 @@ jobs:
         env:
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
         run: |
-          RPC="$(printf '%s' "$BSC_TESTNET_RPC_URL" | tr -d '\r\n')"
+          RPC="$(printf '%s' "$BSC_TESTNET_RPC_URL" | tr -d '\r\n' | sed 's/^["'\'']//; s/["'\'']$//')"
           if [ -z "$RPC" ]; then
             RPC="https://data-seed-prebsc-1-s1.bnbchain.org:8545"
           fi
           case "$RPC" in
             http://*|https://*) ;;
-            *) echo "BSC_TESTNET_RPC_URL is not a valid HTTP(S) URL after normalization."; exit 1 ;;
+            *)
+              echo "Configured BSC_TESTNET_RPC_URL is malformed; using the official BNB Testnet RPC fallback."
+              RPC="https://data-seed-prebsc-1-s1.bnbchain.org:8545"
+              ;;
           esac
           echo "BSC_TESTNET_RPC_URL=$RPC" >> "$GITHUB_ENV"
           echo "BNB Testnet RPC normalized successfully."
