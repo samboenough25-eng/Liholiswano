@@ -97,17 +97,22 @@ async function verifyCursor(state){
 }
 async function fetchLogsAdaptive(fromBlock,toBlock){
   if(fromBlock>toBlock)return [];
-  try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
-  catch(error){
-    const message=String(error?.shortMessage||error?.message||error);
-    const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
-    if(!retryable||fromBlock===toBlock)throw error;
-    const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
-    await new Promise(resolve=>setTimeout(resolve,1000));
-    const left=await fetchLogsAdaptive(fromBlock,mid);
-    const right=await fetchLogsAdaptive(mid+1,toBlock);
-    return left.concat(right);
+  let lastError;
+  for(let attempt=0;attempt<4;attempt++){
+    try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
+    catch(error){
+      lastError=error;
+      const message=String(error?.shortMessage||error?.message||error);
+      const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
+      if(!retryable)throw error;
+      await new Promise(resolve=>setTimeout(resolve,Math.min(8000,1000*(2**attempt))));
+    }
   }
+  if(fromBlock===toBlock)throw lastError;
+  const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
+  const left=await fetchLogsAdaptive(fromBlock,mid);
+  const right=await fetchLogsAdaptive(mid+1,toBlock);
+  return left.concat(right);
 }
 async function indexRange(chainId,contractAddress,fromBlock,toBlock){
   if(fromBlock>toBlock)return {logs:0,inserted:0,eventsByName:{}};
