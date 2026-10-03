@@ -7,12 +7,15 @@ const { createTransactionAuthorization } = require("./transaction-authorization"
 
 async function userByPhone(db, phone) {
   const q = await db.query(
-    "select id,email,country,phone,phone_verified_at,kyc_status,(select decision_source from kyc_cases where user_id=users.id order by created_at desc limit 1) as kyc_decision_source from users where phone=$1",
+    "select id,email,country,phone,phone_verified_at,kyc_status,pilot_verified_at,(select decision_source from kyc_cases where user_id=users.id order by created_at desc limit 1) as kyc_decision_source from users where phone=$1",
     [phone]
   );
   return q.rows[0] || null;
 }
 
+function testnetPilot(){return process.env.TESTNET_PILOT_MODE==="true" && Number(process.env.BSC_CHAIN_ID||97)===97;}
+async function pilotVerification(db,userId){const q=await db.query("select id,status,legal_first_name,legal_last_name,date_of_birth,document_last4,consent_version,consented_at,verified_at from pilot_verifications where user_id=$1 limit 1",[userId]);return q.rows[0]||null;}
+async function pilotGate(db,user){if(!testnetPilot())return user.kyc_status==="approved";if(!user.phone_verified_at)return false;const p=await pilotVerification(db,user.id);return Boolean(p&&p.status==="approved"&&p.verified_at);}
 async function conversation(db, phone, contactId) {
   const q = await db.query(
     "select c.id,c.state,c.context from whatsapp_conversations c join whatsapp_contacts wc on wc.id=c.contact_id where wc.phone=$1 limit 1",
@@ -51,6 +54,8 @@ function help() {
     "PAY — prepare this month’s subscription payment",
     "CONFIRM <request ID> — explicitly authorize a prepared ROSCA request",
     "CONFIRM PAY <payment ID> — authorize the monthly subscription",
+    "VERIFY — complete WhatsApp pilot identity verification",
+    "KYC — show pilot verification status",
     "SUPPORT <message> — open support ticket",
     "",
     "Financial requests are not completed until the required wallet authorization and blockchain confirmation succeed."
@@ -64,7 +69,8 @@ async function accountText(user) {
     "Country: " + user.country,
     "Phone: " + user.phone,
     "Phone verified: " + Boolean(user.phone_verified_at),
-    "KYC status: " + user.kyc_status
+    "KYC provider status: " + user.kyc_status,
+    "WhatsApp pilot verification: " + (user.pilot_verified_at ? "verified" : "not verified")
   ].join("\n");
 }
 
@@ -120,9 +126,7 @@ async function transactionText(db, user, groupId) {
 }
 
 async function prepareFinancialRequest(db, user, operation, groupId, extra = {}) {
-  const manualPilotAllowed = process.env.TESTNET_PILOT_MODE === "true" && Number(process.env.BSC_CHAIN_ID || 97) === 97;
-  if (user.kyc_status !== "approved" || (user.kyc_decision_source === "manual_stage_a" && !manualPilotAllowed))
-    return "KYC approval is required before this financial action.";
+  if (!(await pilotGate(db, user))) return testnetPilot() ? "WhatsApp pilot verification is required before this financial action. Reply VERIFY to start." : "Production KYC approval is required before this financial action.";
 
   if (!/^(0x)?[a-fA-F0-9]{64}$/.test(groupId))
     return "Use the on-chain group ID exactly as provided by Liholiswano.";
@@ -239,14 +243,46 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
     const base = process.env.PUBLIC_WEB_URL || "https://liholiswano-bnb-web.onrender.com";
     return ["Wallet setup", "Your BNB wallet must be verified before financial actions.", "Open:", base + "/dashboard.html", "", "Connect your BNB Testnet wallet and complete wallet ownership verification. Never send your seed phrase or private key to Liholiswano."].join("\n");
   }
-  if (normalized === "kyc") {
-    const base = process.env.PUBLIC_WEB_URL || "https://liholiswano-bnb-web.onrender.com";
-    return ["KYC", "Current status: " + user.kyc_status, "Open your customer dashboard to complete or review KYC:", base + "/dashboard.html", "", "Testnet pilot KYC may use authorized manual review. Production biometric and AML screening remain separate activation gates."].join("\n");
+  if (normalized === "kyc" || normalized === "verify") {
+    if(!testnetPilot()){const base=process.env.PUBLIC_WEB_URL||"https://liholiswano-bnb-web.onrender.com";return ["KYC","Production KYC status: "+user.kyc_status,"Provider KYC is not part of the Testnet WhatsApp pilot.","Open the dashboard when production KYC providers are connected:",base+"/dashboard.html"].join("\n");}
+    const p=await pilotVerification(db,user.id);
+    if(p&&p.status==="approved"&&p.verified_at)return ["WhatsApp pilot verification","Status: VERIFIED","Verified on: "+new Date(p.verified_at).toISOString(),"","You can now use Testnet ROSCA financial actions. Your wallet must still be cryptographically verified."].join("\n");
+    if(!user.phone_verified_at)return ["WhatsApp pilot verification","First link and verify this WhatsApp number from your Liholiswano account.","Then reply VERIFY here."].join("\n");
+    await db.query("insert into pilot_verifications(user_id,channel,status) values($1,'whatsapp','pending') on conflict(user_id) do nothing",[user.id]);
+    await setConversation(db,conv?.id,"pilot_name",{});
+    return "WhatsApp pilot verification started. Reply with your legal first and last name.";
+  }
+  if (conv && conv.state === "pilot_name" && normalized !== "verify" && normalized !== "kyc") {
+    const name=input.replace(/\s+/g," ").trim(),parts=name.split(" ");
+    if(parts.length<2||name.length<3||name.length>180)return "Please send your legal first and last name, for example: Anele Sambo.";
+    await setConversation(db,conv.id,"pilot_dob",{firstName:parts[0],lastName:parts.slice(1).join(" ")});
+    return "Thank you. Now send your date of birth in YYYY-MM-DD format.";
+  }
+  if (conv && conv.state === "pilot_dob" && normalized !== "verify" && normalized !== "kyc") {
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(input))return "Use YYYY-MM-DD, for example 1995-08-21.";
+    const d=new Date(input+"T00:00:00Z");if(Number.isNaN(d.getTime())||d>new Date())return "That date of birth is not valid. Send it as YYYY-MM-DD.";
+    const context=conv.context||{};await setConversation(db,conv.id,"pilot_id4",{...context,dateOfBirth:input});
+    return "Now send the last 4 digits of your Botswana/Eswatini ID or passport. Do not send the full document number or a photo.";
+  }
+  if (conv && conv.state === "pilot_id4" && normalized !== "verify" && normalized !== "kyc") {
+    if(!/^\d{4}$/.test(input))return "Send exactly the last 4 digits only.";
+    const context=conv.context||{};await setConversation(db,conv.id,"pilot_consent",{...context,documentLast4:input});
+    return "This is limited Testnet pilot verification, not regulated KYC. It verifies the identity attached to your WhatsApp account for this pilot. Reply YES to consent.";
+  }
+  if (conv && conv.state === "pilot_consent" && normalized !== "verify" && normalized !== "kyc") {
+    if(normalized!=="yes")return "Reply YES to complete WhatsApp pilot verification, or NO to cancel.";
+    const context=conv.context||{};
+    const q=await db.query("insert into pilot_verifications(user_id,channel,status,legal_first_name,legal_last_name,date_of_birth,document_last4,consent_version,consented_at,verified_at) values($1,'whatsapp','approved',$2,$3,$4,$5,'whatsapp-pilot-v1',now(),now()) on conflict(user_id) do update set status='approved',legal_first_name=excluded.legal_first_name,legal_last_name=excluded.legal_last_name,date_of_birth=excluded.date_of_birth,document_last4=excluded.document_last4,consent_version=excluded.consent_version,consented_at=excluded.consented_at,verified_at=excluded.verified_at,updated_at=now() returning id,verified_at",[user.id,context.firstName,context.lastName,context.dateOfBirth,context.documentLast4]);
+    await db.query("update users set pilot_verified_at=now(),updated_at=now() where id=$1",[user.id]);
+    await db.query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'whatsapp.pilot_verified','user',$1,$2)",[user.id,JSON.stringify({channel:"whatsapp",verificationId:q.rows[0].id,version:"whatsapp-pilot-v1"})]);
+    await setConversation(db,conv.id,"menu",{});
+    return "WhatsApp pilot verification is complete. You may now use Testnet ROSCA financial actions. Your verified BNB wallet is still required. Reply MENU.";
   }
   if (normalized === "status") return accountText(user);
   if (normalized === "help") return help();
   if (normalized === "11") return handleCommand({phone,text:"wallet",db,contactId,messageId});
   if (normalized === "12") return handleCommand({phone,text:"kyc",db,contactId,messageId});
+  if (normalized === "verify") return handleCommand({phone,text:"kyc",db,contactId,messageId});
   if (normalized === "1" || normalized === "account") return accountText(user);
   if (normalized === "2") return "Send JOIN <group ID>.";
   if (normalized === "3" || normalized === "groups") return listGroups(db, user);
