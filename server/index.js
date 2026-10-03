@@ -139,7 +139,8 @@ app.get("/api/public-config",async(req,res)=>{res.json({
   subscriptionContractAddress:process.env.SUBSCRIPTION_CONTRACT_ADDRESS||"",
   tokenSymbol:process.env.SUBSCRIPTION_TOKEN_SYMBOL||"mUSDT",
   tokenDecimals:Number(process.env.SUBSCRIPTION_TOKEN_DECIMALS||6),
-  environment:"testnet"
+  environment:"testnet",
+  subscriptionsEnabled:process.env.SUBSCRIPTIONS_ENABLED==="true"
 });});
 
 app.get("/health",async(req,res)=>{
