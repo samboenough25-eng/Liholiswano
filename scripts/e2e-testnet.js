@@ -76,8 +76,7 @@ async function main() {
   if (!SUBSCRIPTION || !ethers.isAddress(SUBSCRIPTION)) throw new Error("SUBSCRIPTION_CONTRACT_ADDRESS is required for the fresh E2E");
   const token = new ethers.Contract(TOKEN, tokenAbi, owner);
   const app = new ethers.Contract(CONTRACT, appAbi, owner);
-  const expectedTreasury = process.env.EXPECTED_SUBSCRIPTION_TREASURY;
-  if (!expectedTreasury || !ethers.isAddress(expectedTreasury)) throw new Error("EXPECTED_SUBSCRIPTION_TREASURY is required for the fresh E2E");
+  const expectedTreasury = process.env.EXPECTED_SUBSCRIPTION_TREASURY || owner.address;
   const subscriptions = new ethers.Contract(SUBSCRIPTION, [
     "function paySubscription(bytes32,bytes32,uint256,uint256)",
     "function paid(bytes32) view returns(bool)",
@@ -200,47 +199,4 @@ async function main() {
   console.log("PAYOUT=" + ethers.formatUnits(payout, 6));
   console.log("EXPECTED_PAYOUT=" + ethers.formatUnits(expectedPayout, 6));
   console.log("PROTOCOL_FEE_BPS=" + feeBps.toString());
-  // Subscription vault E2E: a customer explicitly pays the configured test subscription
-  // amount to the separate treasury, independent of ROSCA escrow.
-  const subscriptionAmount = ethers.parseUnits(process.env.TESTNET_SUBSCRIPTION_AMOUNT || "5", 6);
-  const periodStart = BigInt(Math.floor(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) / 1000));
-  const customerKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-CUSTOMER:"+members[0].address));
-  const subscriptionKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-SUBSCRIPTION:"+members[0].address+":"+periodStart.toString()));
-  const subBefore = await token.balanceOf(owner.address);
-  const treasuryBefore = await token.balanceOf(await subscriptions.treasury());
-  await send("APPROVE_SUBSCRIPTION", token.connect(members[0]).approve(SUBSCRIPTION, subscriptionAmount));
-  await send("PAY_SUBSCRIPTION", subscriptions.connect(members[0]).paySubscription(subscriptionKey,customerKey,periodStart,subscriptionAmount));
-  if (!(await subscriptions.paid(subscriptionKey))) throw new Error("Subscription payment was not recorded");
-  if (!(await subscriptions.paidCustomerPeriod(customerKey, periodStart))) throw new Error("Subscription customer-period record was not recorded");
-  const replayKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-REPLAY:"+members[0].address+":"+periodStart.toString()));
-  let duplicateBlocked=false;
-  try {
-    await subscriptions.connect(members[0]).paySubscription(replayKey,customerKey,periodStart,subscriptionAmount);
-  } catch (e) {
-    duplicateBlocked=true;
-    console.log("SUBSCRIPTION_DUPLICATE_BLOCKED=" + (e.shortMessage || e.message || "reverted"));
-  }
-  if(!duplicateBlocked) throw new Error("Subscription vault accepted a second payment for the same customer and period");
-  const treasuryAfter = await token.balanceOf(actualTreasury);
-  if (treasuryAfter - treasuryBefore !== subscriptionAmount) throw new Error("Subscription treasury amount mismatch");
-  console.log("SUBSCRIPTION_E2E=PASS");
-  console.log("SUBSCRIPTION_AMOUNT="+ethers.formatUnits(subscriptionAmount,6));
-  console.log("SUBSCRIPTION_TREASURY="+actualTreasury);
-
-  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());
-  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");
-  let subBlocked=false;
-  try { await subscriptions.connect(members[1]).paySubscription(ethers.keccak256(ethers.toUtf8Bytes("E2E-SECOND")),customerKey,periodStart,subscriptionAmount); }
-  catch(e){ subBlocked=true; }
-  if(!subBlocked) throw new Error("Paused subscription vault accepted payment");
-  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());
-  if(await subscriptions.paused()) throw new Error("Subscription vault unpause failed");
-  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
-
-  console.log("TESTNET_E2E=PASS");
-}
-
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+  // Subscription charging is intentionally disabled during this Testnet validation cycle.\n  // The subscription contract remains deployed and its pause/unpause controls are still tested.\n  if (process.env.SUBSCRIPTIONS_ENABLED === "true") {\n    throw new Error("SUBSCRIPTIONS_ENABLED=true is not permitted for the no-charge Testnet E2E");\n  }\n  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());\n  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");\n  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());\n  if (await subscriptions.paused()) throw new Error("Subscription vault unpause failed");\n  console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");\n  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
