@@ -26,6 +26,10 @@ describe("LiholiswanoSubscriptions",function(){
     expect(await f.vault.paid(key)).eq(true);
     await expect(f.vault.connect(f.alice).paySubscription(key,customer,period,amount))
       .to.be.revertedWithCustomError(f.vault,"AlreadyPaid");
+    const differentKey=ethers.keccak256(ethers.toUtf8Bytes("alice-2026-10-different-key"));
+    await expect(f.vault.connect(f.alice).paySubscription(differentKey,customer,period,amount))
+      .to.be.revertedWithCustomError(f.vault,"AlreadyPaidPeriod");
+    expect(await f.vault.paidCustomerPeriod(customer,period)).eq(true);
   });
 
   it("pauses payments and only the owner can administer",async()=>{
