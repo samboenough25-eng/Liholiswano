@@ -54,8 +54,7 @@ function help() {
     "SUPPORT <message> — open support ticket",
     "",
     "Financial requests are not completed until the required wallet authorization and blockchain confirmation succeed."
-  ].join("
-");
+  ].join("\n");
 }
 
 async function accountText(user) {
@@ -66,8 +65,7 @@ async function accountText(user) {
     "Phone: " + user.phone,
     "Phone verified: " + Boolean(user.phone_verified_at),
     "KYC status: " + user.kyc_status
-  ].join("
-");
+  ].join("\n");
 }
 
 async function listGroups(db, user) {
@@ -77,10 +75,8 @@ async function listGroups(db, user) {
   );
   if (!q.rowCount) return "You are not currently in a ROSCA.";
   return ["My groups", ...q.rows.map((x,i) =>
-    (i + 1) + ". " + x.name + " [" + x.status + "]
-   " + x.onchain_group_id
-  )].join("
-");
+    (i + 1) + ". " + x.name + " [" + x.status + "]\n   " + x.onchain_group_id
+  )].join("\n");
 }
 
 async function balanceText(db, user) {
@@ -89,8 +85,7 @@ async function balanceText(db, user) {
     [user.id]
   );
   return q.rowCount
-    ? ["Confirmed balance", ...q.rows.map(x => x.asset_symbol + ": " + x.balance)].join("
-")
+    ? ["Confirmed balance", ...q.rows.map(x => x.asset_symbol + ": " + x.balance)].join("\n")
     : "No confirmed ledger balance yet.";
 }
 
@@ -106,8 +101,7 @@ async function transactionText(db, user, groupId) {
   if (!q.rowCount) return "No blockchain transactions found.";
   return ["Transactions", ...q.rows.map(x =>
     x.action + " • " + x.status + (x.tx_hash ? " • " + x.tx_hash : "")
-  )].join("
-");
+  )].join("\n");
 }
 
 async function prepareFinancialRequest(db, user, operation, groupId, extra = {}) {
@@ -168,8 +162,7 @@ async function prepareFinancialRequest(db, user, operation, groupId, extra = {})
       "Amount: enforced by the smart contract",
       "",
       "The wallet authorization service is required to sign this request. No funds have moved."
-    ].join("
-");
+    ].join("\n");
   }
 
   return [
@@ -179,8 +172,7 @@ async function prepareFinancialRequest(db, user, operation, groupId, extra = {})
     "",
     "Wallet authorization is not configured yet. No funds have moved.",
     "A production WhatsApp-only customer experience requires a secure wallet-signing service or supported wallet handoff."
-  ].join("
-");
+  ].join("\n");
 }
 
 async function handleCommand({ phone, text, db, contactId, messageId }) {
@@ -240,8 +232,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
     if (process.env.SUBSCRIPTIONS_ENABLED !== "true") return "Monthly subscription payments are temporarily disabled while the Testnet platform is being validated. Your account is not charged.";
     try {
       const s=await prepareSubscriptionForUser(db,user);
-      return ["Monthly subscription","Due: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Status: "+(s.alreadyPaid?"PAID":s.payment.status.toUpperCase()),"Stablecoin amount is configured by the platform."].join("
-");
+      return ["Monthly subscription","Due: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Status: "+(s.alreadyPaid?"PAID":s.payment.status.toUpperCase()),"Stablecoin amount is configured by the platform."].join("\n");
     } catch(e) { return "Subscription is not configured yet: "+String(e.message||e); }
   }
   if (normalized === "pay" || normalized === "10") {
@@ -249,8 +240,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
     try {
       const s=await prepareSubscriptionForUser(db,user);
       if(s.alreadyPaid) return "Your subscription for "+s.payment.period_key+" is already paid.";
-      return ["Subscription payment prepared","Amount: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Payment request: "+s.payment.id,"","Reply CONFIRM PAY "+s.payment.id+" to receive the secure wallet authorization link.","No funds have moved yet."].join("
-");
+      return ["Subscription payment prepared","Amount: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Payment request: "+s.payment.id,"","Reply CONFIRM PAY "+s.payment.id+" to receive the secure wallet authorization link.","No funds have moved yet."].join("\n");
     } catch(e) { return "Unable to prepare subscription payment: "+String(e.message||e); }
   }
   if (normalized.startsWith("confirm pay ")) {
@@ -262,8 +252,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
       if(q.rows[0].status==="confirmed")return "That subscription payment is already confirmed.";
       const token=await createSubscriptionAuthorization(db,user.id,paymentId);
       const base=process.env.PUBLIC_WEB_URL||"https://liholiswano-bnb-web.onrender.com";
-      return ["Confirmed. Open the secure wallet authorization link:",base+"/subscription.html?request="+encodeURIComponent(paymentId)+"&token="+token,"","Review the amount and contract in the wallet before approving."].join("
-");
+      return ["Confirmed. Open the secure wallet authorization link:",base+"/subscription.html?request="+encodeURIComponent(paymentId)+"&token="+token,"","Review the amount and contract in the wallet before approving."].join("\n");
     } catch(e){return "Unable to create the subscription authorization link: "+String(e.message||e);}
   }
   if (normalized.startsWith("confirm ")) {
@@ -276,8 +265,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
       if(q.rows[0].status!=="prepared")return "That transaction is not awaiting confirmation.";
       const token=await createTransactionAuthorization(db,user.id,requestId);
       const base=process.env.PUBLIC_WEB_URL||"https://liholiswano-bnb-web.onrender.com";
-      return ["Confirmed. Open the secure wallet authorization link:",base+"/authorize.html?request="+encodeURIComponent(requestId)+"&token="+token,"","Review the transaction in your wallet and explicitly approve it.","No transaction is complete until the blockchain receipt is verified."].join("
-");
+      return ["Confirmed. Open the secure wallet authorization link:",base+"/authorize.html?request="+encodeURIComponent(requestId)+"&token="+token,"","Review the transaction in your wallet and explicitly approve it.","No transaction is complete until the blockchain receipt is verified."].join("\n");
     }catch(e){return "Unable to create the wallet authorization link: "+String(e.message||e);}
   }
 
@@ -302,8 +290,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
         "Members: " + s.memberCount,
         "Contribution: " + s.contribution,
         "Deadline: " + new Date(Number(s.roundDeadline) * 1000).toISOString()
-      ].join("
-");
+      ].join("\n");
     } catch {
       return "Unable to retrieve that ROSCA state.";
     }
@@ -314,9 +301,7 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
     try {
       const result = await prepareFinancialRequest(db, user, "join", id);
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "join", groupId: id });
-      return result+"
-
-Reply CONFIRM <request ID> to continue.";
+      return result+"\n\nReply CONFIRM <request ID> to continue.";
     } catch (e) {
       return "Unable to prepare the ROSCA join request: " + String(e.message || e);
     }
@@ -330,9 +315,7 @@ Reply CONFIRM <request ID> to continue.";
     try{
       const result=await prepareFinancialRequest(db,user,"bid",parts[1],{bidBps:Math.round(bid*100),idempotencyKey:"whatsapp:"+String(messageId||crypto.randomUUID())+":bid"});
       if(conv)await setConversation(db,conv.id,"awaiting_confirmation",{operation:"bid",groupId:parts[1]});
-      return result+"
-
-Reply CONFIRM <request ID> to continue.";
+      return result+"\n\nReply CONFIRM <request ID> to continue.";
     }catch(e){return "Unable to prepare the bid: "+String(e.message||e);}
   }
 
@@ -342,9 +325,7 @@ Reply CONFIRM <request ID> to continue.";
     try {
       const result = await prepareFinancialRequest(db, user, "contribute", parts[1], {idempotencyKey:"whatsapp:"+String(messageId||crypto.randomUUID())+":contribute"});
       if (conv) await setConversation(db, conv.id, "awaiting_wallet_authorization", { operation: "contribute", groupId: parts[1] });
-      return result+"
-
-Reply CONFIRM <request ID> to continue.";
+      return result+"\n\nReply CONFIRM <request ID> to continue.";
     } catch (e) {
       return "Unable to prepare the contribution request: " + String(e.message || e);
     }
@@ -361,8 +342,7 @@ Reply CONFIRM <request ID> to continue.";
         "Rotation: " + s.rotation,
         "Escrow: " + s.escrowBalance,
         "Deadline: " + new Date(Number(s.roundDeadline) * 1000).toISOString()
-      ].join("
-");
+      ].join("\n");
     } catch {
       return "Unable to retrieve payout status for that ROSCA.";
     }
