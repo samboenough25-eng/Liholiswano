@@ -37,6 +37,8 @@ a{color:inherit}
 const saved=(()=>{try{return JSON.parse(localStorage.getItem("liholiswano-bnb-config")||"{}")}catch{return{}}})();
 if(saved.contractAddress)C.contractAddress=saved.contractAddress;
 if(saved.tokenAddress)C.tokenAddress=saved.tokenAddress;
+async function syncPublicConfig(){try{const r=await fetch("https://liholiswano-bnb-api.onrender.com/api/public-config",{cache:"no-store"});if(!r.ok)throw Error("public config unavailable");const d=await r.json();Object.assign(C,d);C.deploymentConfigured=Boolean(C.contractAddress&&C.tokenAddress);}catch(e){log("Unable to load current deployment configuration. Enter the fresh Testnet addresses from the deployment record.");}}
+syncPublicConfig();
 const ABI=[
 "function owner() view returns(address)","function approvedToken(address) view returns(bool)","function setApprovedToken(address,bool)",
 "function createGroup(bytes32,address,uint256,uint256,uint256,uint256)","function joinGroup(bytes32)","function lockGroup(bytes32)",
