@@ -105,7 +105,8 @@ async function transactionText(db, user, groupId) {
 }
 
 async function prepareFinancialRequest(db, user, operation, groupId, extra = {}) {
-  if (user.kyc_status !== "approved" || user.kyc_decision_source === "manual_stage_a")
+  const manualPilotAllowed = process.env.TESTNET_PILOT_MODE === "true" && Number(process.env.BSC_CHAIN_ID || 97) === 97;
+  if (user.kyc_status !== "approved" || (user.kyc_decision_source === "manual_stage_a" && !manualPilotAllowed))
     return "KYC approval is required before this financial action.";
 
   if (!/^(0x)?[a-fA-F0-9]{64}$/.test(groupId))
