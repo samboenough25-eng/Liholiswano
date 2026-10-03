@@ -49,7 +49,7 @@ async function main() {
   console.log("TOKEN_SYMBOL=mUSDT");
   console.log("TOKEN_DECIMALS=6");
   console.log("TOKEN_APPROVED=true");
-  console.log("NEXT=copy LIHOLISWANO_CONTRACT and TEST_TOKEN_CONTRACT into web/config.js");
+  console.log("NEXT=export the three deployed addresses to the Testnet deployment record; the web UI reads current deployment configuration from the API.");
 }
 
 main().catch((e) => {
