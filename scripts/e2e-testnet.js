@@ -9,8 +9,8 @@ const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E
 const SUBSCRIPTION = process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
 // Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
 // the test only needs enough tBNB for each temporary member's transactions.
-const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.002");
-const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.01");
+const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.003");
+const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.05");
 
 if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
 
@@ -76,6 +76,8 @@ async function main() {
   if (!SUBSCRIPTION || !ethers.isAddress(SUBSCRIPTION)) throw new Error("SUBSCRIPTION_CONTRACT_ADDRESS is required for the fresh E2E");
   const token = new ethers.Contract(TOKEN, tokenAbi, owner);
   const app = new ethers.Contract(CONTRACT, appAbi, owner);
+  const expectedTreasury = process.env.EXPECTED_SUBSCRIPTION_TREASURY;
+  if (!expectedTreasury || !ethers.isAddress(expectedTreasury)) throw new Error("EXPECTED_SUBSCRIPTION_TREASURY is required for the fresh E2E");
   const subscriptions = new ethers.Contract(SUBSCRIPTION, [
     "function paySubscription(bytes32,bytes32,uint256,uint256)",
     "function paid(bytes32) view returns(bool)",
@@ -89,6 +91,10 @@ async function main() {
   if (!(await app.approvedToken(TOKEN))) {
     throw new Error("Test token is not allowlisted by the deployed Liholiswano contract");
   }
+  const actualTreasury = await subscriptions.treasury();
+  const actualToken = await subscriptions.token();
+  if (actualToken.toLowerCase() !== TOKEN.toLowerCase()) throw new Error("Subscription vault token mismatch: " + actualToken);
+  if (actualTreasury.toLowerCase() !== expectedTreasury.toLowerCase()) throw new Error("Subscription treasury mismatch: deployed=" + actualTreasury + " expected=" + expectedTreasury);
 
   console.log("CHAIN_ID=97");
   console.log("DEPLOYER=" + owner.address);
