@@ -81,6 +81,7 @@ async function main() {
   const subscriptions = new ethers.Contract(SUBSCRIPTION, [
     "function paySubscription(bytes32,bytes32,uint256,uint256)",
     "function paid(bytes32) view returns(bool)",
+    "function paidCustomerPeriod(bytes32,uint256) view returns(bool)",
     "function treasury() view returns(address)",
     "function token() view returns(address)",
     "function pause()",
@@ -210,6 +211,16 @@ async function main() {
   await send("APPROVE_SUBSCRIPTION", token.connect(members[0]).approve(SUBSCRIPTION, subscriptionAmount));
   await send("PAY_SUBSCRIPTION", subscriptions.connect(members[0]).paySubscription(subscriptionKey,customerKey,periodStart,subscriptionAmount));
   if (!(await subscriptions.paid(subscriptionKey))) throw new Error("Subscription payment was not recorded");
+  if (!(await subscriptions.paidCustomerPeriod(customerKey, periodStart))) throw new Error("Subscription customer-period record was not recorded");
+  const replayKey = ethers.keccak256(ethers.toUtf8Bytes("E2E-REPLAY:"+members[0].address+":"+periodStart.toString()));
+  let duplicateBlocked=false;
+  try {
+    await subscriptions.connect(members[0]).paySubscription(replayKey,customerKey,periodStart,subscriptionAmount);
+  } catch (e) {
+    duplicateBlocked=true;
+    console.log("SUBSCRIPTION_DUPLICATE_BLOCKED=" + (e.shortMessage || e.message || "reverted"));
+  }
+  if(!duplicateBlocked) throw new Error("Subscription vault accepted a second payment for the same customer and period");
   const treasuryAfter = await token.balanceOf(actualTreasury);
   if (treasuryAfter - treasuryBefore !== subscriptionAmount) throw new Error("Subscription treasury amount mismatch");
   console.log("SUBSCRIPTION_E2E=PASS");
