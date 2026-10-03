@@ -245,6 +245,8 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
   }
   if (normalized === "status") return accountText(user);
   if (normalized === "help") return help();
+  if (normalized === "11") return handleCommand({phone,text:"wallet",db,contactId,messageId});
+  if (normalized === "12") return handleCommand({phone,text:"kyc",db,contactId,messageId});
   if (normalized === "1" || normalized === "account") return accountText(user);
   if (normalized === "2") return "Send JOIN <group ID>.";
   if (normalized === "3" || normalized === "groups") return listGroups(db, user);
