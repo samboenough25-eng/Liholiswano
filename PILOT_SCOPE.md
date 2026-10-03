@@ -46,3 +46,18 @@ MockUSDT is a development token. It is not USDT or USDC and must never be used a
 ## Production boundary
 
 Testnet success is not a security audit, regulatory approval, custody approval or authorization to operate a real-money financial service.
+
+
+## Current Testnet onboarding decision
+
+Because external KYC providers cannot currently be connected, the Testnet pilot uses **WhatsApp-linked pilot verification** as its onboarding gate.
+
+Pilot flow:
+1. Customer creates a Liholiswano account.
+2. Customer links and verifies the WhatsApp number they control.
+3. Customer sends `VERIFY` on WhatsApp.
+4. WhatsApp collects legal first/last name, date of birth, the last four ID/passport digits, and explicit pilot consent.
+5. The API records the pilot verification and audit event.
+6. Testnet ROSCA financial actions require this pilot verification plus a cryptographically verified BNB wallet.
+
+This pilot verification does **not** perform government-ID verification, biometric face matching, liveness detection, AML/sanctions/PEP screening, or other regulated KYC checks. Those controls remain a Mainnet/production gate until the required providers and compliance processes are connected.
