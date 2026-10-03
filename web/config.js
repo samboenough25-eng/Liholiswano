@@ -1,7 +1,7 @@
 window.LIHOLISWANO_CONFIG={
   chainId:97,
   chainName:"BNB Smart Chain Testnet",
-  rpcUrl:"https://bsc-testnet.bnbchain.org",
+  rpcUrl:"https://data-seed-prebsc-1-s1.bnbchain.org:8545",
   explorer:"https://testnet.bscscan.com",
   contractAddress:"0x3b3272900EfdC7d9999969E3A0c64F8019fECeAf",
   tokenAddress:"0x0499B15F9378971E8e1700744821dBc969E90e04",
