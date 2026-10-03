@@ -1,0 +1,102 @@
+name: BNB Testnet Deploy and Full E2E
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-and-e2e:
+    name: Fresh BNB Testnet deployment + full financial E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout BNB application branch
+        uses: actions/checkout@v4
+        with:
+          ref: bnb-app-complete
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Require committed dependency lockfile
+        run: test -f package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Validate deployment secrets and network
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          SUBSCRIPTION_TREASURY_ADDRESS: ${{ vars.SUBSCRIPTION_TREASURY_ADDRESS }}
+        run: |
+          test -n "$DEPLOYER_PRIVATE_KEY" || { echo "DEPLOYER_PRIVATE_KEY is missing"; exit 1; }
+          test -n "$BSC_TESTNET_RPC_URL" || { echo "BSC_TESTNET_RPC_URL is missing"; exit 1; }
+          test -n "$SUBSCRIPTION_TREASURY_ADDRESS" || { echo "SUBSCRIPTION_TREASURY_ADDRESS is missing"; exit 1; }
+          DEPLOYER_PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" BSC_TESTNET_RPC_URL="$BSC_TESTNET_RPC_URL" node - <<'NODE'
+          const { ethers } = require("ethers");
+          (async () => {
+            const provider = new ethers.JsonRpcProvider(process.env.BSC_TESTNET_RPC_URL);
+            const wallet = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
+            const network = await provider.getNetwork();
+            if (network.chainId !== 97n) throw new Error("RPC is not BSC Testnet (chain 97)");
+            console.log("DEPLOYER=" + wallet.address);
+            console.log("CHAIN_ID=" + network.chainId);
+            console.log("DEPLOYER_BALANCE_TBNB=" + ethers.formatEther(await provider.getBalance(wallet.address)));
+          })().catch(e => { console.error(e); process.exit(1); });
+          NODE
+      - name: Compile contracts
+        run: npm run compile
+      - name: Deploy fresh Testnet contracts
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          SUBSCRIPTION_TREASURY_ADDRESS: ${{ vars.SUBSCRIPTION_TREASURY_ADDRESS }}
+        run: |
+          npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy-output.txt
+          CONTRACT=$(grep '^LIHOLISWANO_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          TOKEN=$(grep '^TEST_TOKEN_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          SUBSCRIPTION=$(grep '^SUBSCRIPTION_CONTRACT=' deploy-output.txt | cut -d= -f2)
+          test -n "$CONTRACT" || { echo "Protocol address missing"; exit 1; }
+          test -n "$TOKEN" || { echo "Test token address missing"; exit 1; }
+          test -n "$SUBSCRIPTION" || { echo "Subscription contract address missing"; exit 1; }
+          echo "$CONTRACT" | grep -Eq '^0x[0-9a-fA-F]{40}$'
+          echo "$TOKEN" | grep -Eq '^0x[0-9a-fA-F]{40}$'
+          echo "$SUBSCRIPTION" | grep -Eq '^0x[0-9a-fA-F]{40}$'
+          echo "BNB_CONTRACT_ADDRESS=$CONTRACT" >> "$GITHUB_ENV"
+          echo "TEST_TOKEN_CONTRACT=$TOKEN" >> "$GITHUB_ENV"
+          echo "SUBSCRIPTION_CONTRACT_ADDRESS=$SUBSCRIPTION" >> "$GITHUB_ENV"
+          {
+            echo "DEPLOYED_PROTOCOL=$CONTRACT"
+            echo "DEPLOYED_TEST_TOKEN=$TOKEN"
+            echo "DEPLOYED_SUBSCRIPTION=$SUBSCRIPTION"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Run full financial E2E against fresh deployment
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BNB_CONTRACT_ADDRESS: ${{ env.BNB_CONTRACT_ADDRESS }}
+          TEST_TOKEN_CONTRACT: ${{ env.TEST_TOKEN_CONTRACT }}
+          SUBSCRIPTION_CONTRACT_ADDRESS: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
+          EXPECTED_SUBSCRIPTION_TREASURY: ${{ vars.SUBSCRIPTION_TREASURY_ADDRESS }}
+        run: node scripts/e2e-testnet.js
+      - name: Save deployment record
+        uses: actions/upload-artifact@v4
+        with:
+          name: bnb-testnet-deployment
+          path: deploy-output.txt
+          retention-days: 30
+      - name: Publish deployment summary
+        run: |
+          {
+            echo "## Fresh BNB Testnet deployment"
+            echo ""
+            echo "- Protocol: `$BNB_CONTRACT_ADDRESS`"
+            echo "- Test token: `$TEST_TOKEN_CONTRACT`"
+            echo "- Subscription vault: `$SUBSCRIPTION_CONTRACT_ADDRESS`"
+            echo "- Chain ID: `97`"
+            echo "- Full ROSCA + subscription E2E: passed"
+            echo ""
+            echo "This workflow does not change Render configuration."
+          } >> "$GITHUB_STEP_SUMMARY"
