@@ -9,6 +9,8 @@ const SUBSCRIPTION_ABI = [
   "event SubscriptionPaid(bytes32 indexed subscriptionKey,bytes32 indexed customerKey,address indexed payer,address token,uint256 amount,uint256 periodStart)"
 ];
 
+function subscriptionsEnabled() { return process.env.SUBSCRIPTIONS_ENABLED === "true"; }
+
 function provider() {
   const rpc = process.env.BSC_RPC_URL || process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet-dataseed.bnbchain.org";
   return new ethers.JsonRpcProvider(rpc);
@@ -97,6 +99,7 @@ async function createAuthorization(db,userId,paymentId) {
 
 function installSubscriptions({ app, db, auth, requireRole, audit }) {
   app.get("/api/subscription", auth, async (req, res) => {
+    if (!subscriptionsEnabled()) return res.json({enabled:false,status:"disabled",message:"Monthly subscription payments are temporarily disabled while the Testnet platform is being validated.",activationRequired:"SUBSCRIPTIONS_ENABLED=true"});
     const account = fiatForCountry(req.user.country);
     const current = monthStart();
     const p = periodKey(current);
@@ -117,6 +120,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
   });
 
   app.post("/api/subscription/prepare", auth, async (req, res) => {
+    if (!subscriptionsEnabled()) return res.status(409).json({enabled:false,error:"Monthly subscription payments are temporarily disabled while the Testnet platform is being validated."});
     try {
       const result = await prepareSubscriptionForUser(db(), req.user);
       res.status(result.alreadyPaid ? 200 : 201).json({
@@ -140,6 +144,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
   });
 
   app.post("/api/subscription/record", auth, async (req, res) => {
+    if (!subscriptionsEnabled()) return res.status(409).json({enabled:false,error:"Monthly subscription payments are temporarily disabled while the Testnet platform is being validated."});
     try {
       const paymentId = String(req.body.paymentId || "");
       const txHash = String(req.body.txHash || "");
@@ -193,6 +198,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
   });
 
   app.get("/api/whatsapp/authorization/:token", async (req,res) => {
+    if (!subscriptionsEnabled()) return res.status(409).json({enabled:false,error:"Subscription payments are temporarily disabled."});
     try {
       const raw = String(req.params.token || "");
       if (!/^[a-f0-9]{64}$/.test(raw)) return res.status(400).json({error:"Invalid authorization token"});
@@ -211,6 +217,7 @@ function installSubscriptions({ app, db, auth, requireRole, audit }) {
   });
 
   app.post("/api/whatsapp/authorization/:token/record", async (req,res) => {
+    if (!subscriptionsEnabled()) return res.status(409).json({enabled:false,error:"Subscription payments are temporarily disabled."});
     const client=await db().connect();
     try{
       const raw=String(req.params.token||""),txHash=String(req.body.txHash||"");
