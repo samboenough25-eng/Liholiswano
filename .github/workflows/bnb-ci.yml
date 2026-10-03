@@ -1,42 +1,43 @@
-name: BNB compile and test
+name: BNB compile, test and validate
 
 on:
   push:
-    branches: [main, bnb-v1, bnb-app-complete]
+    branches: [main, bnb-app-complete]
   pull_request:
+    branches: [main, bnb-app-complete]
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  validate:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-
-      - name: Install dependencies
-        run: npm install
-
+          node-version: "20.18.1"
+          cache: npm
+      - name: Require committed dependency lockfile
+        run: test -f package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
       - name: JavaScript syntax
         run: npm run check:js
-
       - name: API syntax
         run: npm run api:check
-
+      - name: Operational worker syntax
+        run: npm run ops:check
       - name: Solidity compile
         run: npm run compile
-
       - name: Contract tests
         run: npm test
-
       - name: Local ROSCA E2E
         run: npm run e2e:local
-
       - name: Web validation
         run: npm run validate:web
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
