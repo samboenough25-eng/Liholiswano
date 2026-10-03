@@ -172,7 +172,7 @@ app.post("/api/auth/email-verification/confirm",auth,async(req,res)=>{try{const 
 app.post("/api/auth/login",async(req,res)=>{
   try{
     const body=z.object({email:z.string().email(),password:z.string().min(1).max(128)}).parse(req.body);
-    const r=await db().query("select id,email,password_hash,role,status,country,phone,kyc_status from users where email=$1",[body.email.toLowerCase()]);
+    const r=await db().query("select id,email,password_hash,role,status,country,phone,kyc_status,email_verified_at from users where email=$1",[body.email.toLowerCase()]);
     if(!r.rowCount) return res.status(401).json({error:"Invalid email or password"});
     const user=r.rows[0];
     if(!(await bcrypt.compare(body.password,user.password_hash))) return res.status(401).json({error:"Invalid email or password"});
