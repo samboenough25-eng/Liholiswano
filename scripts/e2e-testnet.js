@@ -210,3 +210,10 @@ async function main() {
   if (await subscriptions.paused()) throw new Error("Subscription vault unpause failed");
   console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");
   console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
+
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exitCode = 1;
+});
