@@ -73,9 +73,5 @@ jobs:
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
           BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
-          BNB_CONTRACT_ADDRESS: ${{ env.LIHOLISWANO_CONTRACT }}
-          SUBSCRIPTION_CONTRACT_ADDRESS: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
-          TEST_TOKEN_CONTRACT: ${{ env.TEST_TOKEN_CONTRACT }}
-          EXPECTED_SUBSCRIPTION_TREASURY: ${{ env.EXPECTED_SUBSCRIPTION_TREASURY }}
           SUBSCRIPTIONS_ENABLED: "false"
         run: node scripts/e2e-testnet.js
