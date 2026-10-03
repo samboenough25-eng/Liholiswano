@@ -126,7 +126,7 @@ function selectGroup(x){if(!x)return;$("gid").value=x.id;$("selected").textConte
  $("collateralInfo").textContent=fmt(x.g[5])+" "+tokenSymbol+" collateral required.";
  $("contributionInfo").textContent=fmt(x.g[4])+" "+tokenSymbol+" per round.";
  $("bidInfo").textContent="Maximum bid: "+(Number(x.g[7])/100).toFixed(2)+"%. Higher bids are rejected by the contract.";
- $("groupProgress").classList.remove("hidden");const contributed=x.members.filter(m=>m.active&&m.contributedThisRound).length,active=x.members.filter(m=>m.active).length;pct=active?Math.round(contributed*100/active):0;$("progressText").textContent=contributed+" / "+active+" contributed";$("progressBar").style.width=pct+"%";
+ $("groupProgress").classList.remove("hidden");const contributed=x.members.filter(m=>m.active&&m.contributedThisRound).length,active=x.members.filter(m=>m.active).length,pct=active?Math.round(contributed*100/active):0;$("progressText").textContent=contributed+" / "+active+" contributed";$("progressBar").style.width=pct+"%";
 }
 async function need(){if(!signer)await connect();const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId)){await switchChain();signer=await provider.getSigner();protocol=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,TOKEN,signer)}}
 async function selected(){const gid=$("gid").value.trim();if(!gid)throw Error("Select a savings group first.");const x=groups.find(g=>g.id===gid);if(x)return x;const p=await readProvider(),g=await new E.Contract(C.contractAddress,ABI,p).getGroup(gid);return {id:gid,g}}
