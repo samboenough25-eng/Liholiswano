@@ -10,6 +10,20 @@ const SUBSCRIPTION_ABI = [
 ];
 
 function subscriptionsEnabled() { return process.env.SUBSCRIPTIONS_ENABLED === "true"; }
+function testnetPilot() {
+  return process.env.TESTNET_PILOT_MODE === "true" && Number(process.env.BSC_CHAIN_ID || 97) === 97;
+}
+async function financialAccessAllowed(db, user) {
+  if (testnetPilot()) {
+    if (!user.phone_verified_at) return false;
+    const q = await db.query(
+      "select 1 from pilot_verifications where user_id=$1 and status='approved' and verified_at is not null limit 1",
+      [user.id]
+    );
+    return Boolean(q.rowCount);
+  }
+  return user.kyc_status === "approved" && user.kyc_decision_source !== "manual_stage_a";
+}
 
 function provider() {
   const rpc = process.env.BSC_RPC_URL || process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet-dataseed.bnbchain.org";
@@ -56,6 +70,7 @@ function explorerTx(tx) {
 
 
 async function prepareSubscriptionForUser(db, user) {
+  if (!(await financialAccessAllowed(db, user))) throw new Error(testnetPilot() ? "WhatsApp pilot verification is required" : "Production KYC approval is required");
   const current = monthStart();
   const period = periodKey(current);
   const account = fiatForCountry(user.country);
