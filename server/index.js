@@ -129,6 +129,19 @@ app.get("/api/whatsapp/customer-status",auth,async(req,res)=>{
 
 app.get("/api/system/status",auth,requireRole(["admin","compliance","support"]),async(req,res)=>{let chain={status:"not_configured"};try{const {chainInfo}=require("./blockchain");chain=await chainInfo();}catch(e){chain={status:"error",message:String(e.message).slice(0,200)}}res.json({api:"ok",database:pool?"configured":"not_configured",whatsapp:Boolean(process.env.WHATSAPP_API_URL&&process.env.WHATSAPP_ACCESS_TOKEN),kyc:Boolean(process.env.KYC_PROVIDER),compliance:Boolean(process.env.COMPLIANCE_API_URL&&process.env.COMPLIANCE_API_KEY),walletMode:process.env.WALLET_MODE||"managed",chain});});
 
+app.get("/api/public-config",async(req,res)=>{res.json({
+  chainId:Number(process.env.BSC_CHAIN_ID||97),
+  chainName:"BNB Smart Chain Testnet",
+  rpcUrl:process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet.bnbchain.org",
+  explorer:process.env.BSC_EXPLORER_BASE||"https://testnet.bscscan.com",
+  contractAddress:process.env.BNB_CONTRACT_ADDRESS||"",
+  tokenAddress:process.env.SUBSCRIPTION_TOKEN_ADDRESS||process.env.TEST_TOKEN_CONTRACT||"",
+  subscriptionContractAddress:process.env.SUBSCRIPTION_CONTRACT_ADDRESS||"",
+  tokenSymbol:process.env.SUBSCRIPTION_TOKEN_SYMBOL||"mUSDT",
+  tokenDecimals:Number(process.env.SUBSCRIPTION_TOKEN_DECIMALS||6),
+  environment:"testnet"
+});});
+
 app.get("/health",async(req,res)=>{
   let database="not_configured";
   if(pool){try{await pool.query("select 1");database="ok";}catch{database="error";}}
