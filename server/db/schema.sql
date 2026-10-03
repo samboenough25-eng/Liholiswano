@@ -369,3 +369,20 @@ create index if not exists idx_kyc_identity_case on kyc_identity_submissions(cas
 create index if not exists idx_kyc_documents_case on kyc_documents(case_id,created_at desc);
 create index if not exists idx_kyc_events_case on kyc_events(case_id,created_at desc);
 create index if not exists idx_kyc_provider_events_reference on kyc_provider_events(provider,provider_reference);
+
+
+-- Testnet pilot identity verification.
+-- This is a limited WhatsApp onboarding control, not regulated production KYC.
+create table if not exists pilot_verifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  channel varchar(32) not null default 'whatsapp' check (channel in ('whatsapp')),
+  status varchar(32) not null default 'pending' check (status in ('pending','approved','rejected')),
+  legal_first_name varchar(100), legal_last_name varchar(100),
+  date_of_birth date, document_last4 varchar(4),
+  consent_version varchar(32), consented_at timestamptz, verified_at timestamptz,
+  created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  unique(user_id)
+);
+alter table users add column if not exists pilot_verified_at timestamptz;
+create index if not exists idx_pilot_verifications_user on pilot_verifications(user_id);
