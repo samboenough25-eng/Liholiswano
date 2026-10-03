@@ -229,20 +229,20 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
   if (normalized === "7" || normalized === "transactions") return transactionText(db, user);
   if (normalized === "8" || normalized === "support") return "Send SUPPORT followed by your message.";
   if (normalized === "subscription" || normalized === "9") {
-    try {
+    if (process.env.SUBSCRIPTIONS_ENABLED !== "true") return "Monthly subscription payments are temporarily disabled while the Testnet platform is being validated. Your account is not charged.";\n    try {
       const s=await prepareSubscriptionForUser(db,user);
       return ["Monthly subscription","Due: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Status: "+(s.alreadyPaid?"PAID":s.payment.status.toUpperCase()),"Stablecoin amount is configured by the platform."].join("\n");
     } catch(e) { return "Subscription is not configured yet: "+String(e.message||e); }
   }
   if (normalized === "pay" || normalized === "10") {
-    try {
+    if (process.env.SUBSCRIPTIONS_ENABLED !== "true") return "Monthly subscription payments are temporarily disabled while the Testnet platform is being validated. No funds have moved.";\n    try {
       const s=await prepareSubscriptionForUser(db,user);
       if(s.alreadyPaid) return "Your subscription for "+s.payment.period_key+" is already paid.";
       return ["Subscription payment prepared","Amount: "+(user.country==="BW"?"P5.00":"E5.00"),"Period: "+s.payment.period_key,"Payment request: "+s.payment.id,"","Reply CONFIRM PAY "+s.payment.id+" to receive the secure wallet authorization link.","No funds have moved yet."].join("\n");
     } catch(e) { return "Unable to prepare subscription payment: "+String(e.message||e); }
   }
   if (normalized.startsWith("confirm pay ")) {
-    const paymentId=input.slice(12).trim();
+    if (process.env.SUBSCRIPTIONS_ENABLED !== "true") return "Monthly subscription payments are temporarily disabled. No payment can be authorized.";\n    const paymentId=input.slice(12).trim();
     try {
       const q=await db.query("select id,status from subscription_payments where id=$1 and user_id=$2",[paymentId,user.id]);
       if(!q.rowCount)return "Subscription payment not found.";
