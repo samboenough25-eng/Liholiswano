@@ -21,6 +21,10 @@ const {installTransactionAuthorization}=require("./transaction-authorization");
 const app=express();
 const port=Number(process.env.PORT||3000);
 const jwtSecret=process.env.JWT_SECRET;
+const configuredChainId=Number(process.env.BSC_CHAIN_ID||97);
+function testnetPilot(){return process.env.TESTNET_PILOT_MODE==="true" && configuredChainId===97;}
+async function pilotVerified(userId){const q=await db().query("select 1 from pilot_verifications where user_id=$1 and status='approved' and verified_at is not null limit 1",[userId]);return Boolean(q.rowCount);}
+async function financialAccessAllowed(user){if(testnetPilot())return Boolean(user.phone_verified_at && await pilotVerified(user.id));return user.kyc_status==="approved" && user.kyc_decision_source!=="manual_stage_a";}
 if(!jwtSecret) console.warn("JWT_SECRET is not set; authenticated routes will reject requests.");
 
 const pool=process.env.DATABASE_URL?new Pool({
@@ -60,7 +64,7 @@ async function auth(req,res,next){
     if(!h.startsWith("Bearer ")) return res.status(401).json({error:"Authentication required"});
     if(!jwtSecret) return res.status(503).json({error:"Authentication is not configured"});
     const claims=jwt.verify(h.slice(7),jwtSecret,{issuer:"liholiswano"});
-    const r=await db().query("select id,email,role,status,country,phone,kyc_status,(select decision_source from kyc_cases where user_id=users.id order by created_at desc limit 1) as kyc_decision_source from users where id=$1",[claims.sub]);
+    const r=await db().query("select id,email,role,status,country,phone,phone_verified_at,kyc_status,(select decision_source from kyc_cases where user_id=users.id order by created_at desc limit 1) as kyc_decision_source from users where id=$1",[claims.sub]);
     if(!r.rowCount) return res.status(401).json({error:"User not found"});
     if(r.rows[0].status!=="active") return res.status(403).json({error:"Account is not active"});
     req.user=r.rows[0]; next();
@@ -232,8 +236,7 @@ app.get("/api/me",auth,(req,res)=>res.json({user:req.user}));
 app.get("/api/transactions/requests",auth,async(req,res)=>{const q=await db().query("select id,operation,wallet_address,chain_id,contract_address,onchain_group_id,status,tx_hash,request_json,error_message,created_at,updated_at,confirmed_at from transaction_requests where user_id=$1 order by created_at desc limit 100",[req.user.id]);res.json({requests:q.rows})});
 app.post("/api/transactions/prepare",auth,async(req,res)=>{
   try{
-    const manualPilotAllowed=process.env.TESTNET_PILOT_MODE==="true" && configuredChainId===97;
-    if(req.user.kyc_status!=="approved" || (req.user.kyc_decision_source==="manual_stage_a" && !manualPilotAllowed))return res.status(403).json({error:"KYC approval is required"});
+    if(!(await financialAccessAllowed(req.user)))return res.status(403).json({error:testnetPilot()?"WhatsApp pilot verification is required. Complete VERIFY on WhatsApp first.":"KYC approval is required"});
     const b=req.body||{},operation=String(b.operation||"").trim(),onchainGroupId=String(b.onchainGroupId||"").trim(),key=String(req.headers["idempotency-key"]||b.idempotencyKey||"").trim();
     if(!["join","contribute","bid"].includes(operation)||!/^0x[a-fA-F0-9]{64}$/.test(onchainGroupId)||key.length<8||key.length>255)return res.status(400).json({error:"operation, onchainGroupId and a valid Idempotency-Key are required"});
     let bidBps=null;
@@ -320,15 +323,15 @@ app.post("/api/transactions/record",auth,async(req,res)=>{
 });
 
 app.get("/api/me/eligibility",auth,async(req,res)=>{
-  const restricted=req.user.kyc_status==="approved" && req.user.kyc_decision_source!=="manual_stage_a";
-  res.json({kycStatus:req.user.kyc_status,kycDecisionSource:req.user.kyc_decision_source||null,restrictedFinancialOperations:restricted,reason:restricted?null:"Production KYC/provider approval is required for restricted financial operations"});
+  const restricted=await financialAccessAllowed(req.user);
+  res.json({environment:testnetPilot()?"testnet-pilot":"production",kycStatus:req.user.kyc_status,whatsappPilotVerified:Boolean(req.user.phone_verified_at && await pilotVerified(req.user.id)),restrictedFinancialOperations:restricted,reason:restricted?null:(testnetPilot()?"WhatsApp pilot verification is required":"Production KYC/provider approval is required")});
 });
 
 
 
 app.get("/api/groups",auth,async(req,res)=>{const q=await db().query("select g.id,g.chain_id,g.contract_address,g.onchain_group_id,g.name,g.country,g.status,g.metadata,g.created_at,count(m.id)::int member_count from groups g left join group_memberships m on m.group_id=g.id and m.status in ('active','pending') where g.status<>'suspended' group by g.id order by g.created_at desc");res.json({groups:q.rows})});
 app.get("/api/groups/:id",auth,async(req,res)=>{const q=await db().query("select g.*,(select count(*) from group_memberships m where m.group_id=g.id)::int member_count from groups g where g.id=$1",[req.params.id]);if(!q.rowCount)return res.status(404).json({error:"Group not found"});const m=await db().query("select user_id,wallet_address,status,joined_at,left_at from group_memberships where group_id=$1 order by joined_at",[req.params.id]);res.json({group:q.rows[0],members:m.rows})});
-app.post("/api/groups/:id/join",auth,async(req,res)=>{try{const manualPilotAllowed=process.env.TESTNET_PILOT_MODE==="true" && configuredChainId===97;if(req.user.kyc_status!=="approved" || (req.user.kyc_decision_source==="manual_stage_a" && !manualPilotAllowed))return res.status(403).json({error:"KYC approval is required"});const a=String(req.body.walletAddress||"");if(!/^0x[a-fA-F0-9]{40}$/.test(a))return res.status(400).json({error:"Invalid wallet address"});const wallet=await db().query("select id from wallets where user_id=$1 and chain_id=$3 and lower(address)=lower($2) and verified_at is not null",[req.user.id,a,configuredChainId]);if(!wallet.rowCount)return res.status(403).json({error:"Verify ownership of this wallet before joining a group"});const q=await db().query("insert into group_memberships(group_id,user_id,wallet_address) values($1,$2,$3) returning *",[req.params.id,req.user.id,a.toLowerCase()]);await audit(req.user.id,"group.joined","group",req.params.id);res.status(201).json({membership:q.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Already a member or wallet already used"});res.status(400).json({error:"Unable to join group"})}});
+app.post("/api/groups/:id/join",auth,async(req,res)=>{try{if(!(await financialAccessAllowed(req.user)))return res.status(403).json({error:testnetPilot()?"WhatsApp pilot verification is required":"KYC approval is required"});const a=String(req.body.walletAddress||"");if(!/^0x[a-fA-F0-9]{40}$/.test(a))return res.status(400).json({error:"Invalid wallet address"});const wallet=await db().query("select id from wallets where user_id=$1 and chain_id=$3 and lower(address)=lower($2) and verified_at is not null",[req.user.id,a,configuredChainId]);if(!wallet.rowCount)return res.status(403).json({error:"Verify ownership of this wallet before joining a group"});const q=await db().query("insert into group_memberships(group_id,user_id,wallet_address) values($1,$2,$3) returning *",[req.params.id,req.user.id,a.toLowerCase()]);await audit(req.user.id,"group.joined","group",req.params.id);res.status(201).json({membership:q.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Already a member or wallet already used"});res.status(400).json({error:"Unable to join group"})}});
 
 
 
