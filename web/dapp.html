@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Liholiswano — BNB dApp</title>
+<title>Liholiswano — Customer dApp</title>
 <style>
 :root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#17211b;background:#f5f7f6}
 *{box-sizing:border-box}body{margin:0}.wrap{max-width:1100px;margin:auto;padding:18px}
@@ -8,66 +8,71 @@ header{background:#07583f;color:#fff}.nav{display:flex;justify-content:space-bet
 h1{margin:8px 0 2px}h2{margin-top:0}.muted{color:#68756e;font-size:13px}.card{background:#fff;border:1px solid #dbe5df;border-radius:14px;padding:16px;margin:14px 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}
 button{padding:10px 13px;border:0;border-radius:9px;background:#087f5b;color:#fff;font-weight:700;cursor:pointer;margin:4px}
-button.alt{background:#fff;color:#17211b;border:1px solid #ccd8d1}button.danger{background:#a52a2a}
+button.alt{background:#fff;color:#17211b;border:1px solid #ccd8d1}button:disabled{opacity:.5;cursor:not-allowed}
 .status{padding:11px;border-radius:9px;background:#eef5f0;white-space:pre-wrap;word-break:break-word}
 .status.err{background:#fff0ef;color:#8f211c}.mono{font:12px ui-monospace,Consolas,monospace;word-break:break-all}
 .stat{border:1px solid #dbe5df;border-radius:10px;padding:12px}.stat b{display:block;font-size:20px}.stat span{font-size:12px;color:#68756e}
-input,select{width:100%;padding:10px;border:1px solid #ccd8d1;border-radius:8px;margin:5px 0 10px}
+input{width:100%;padding:10px;border:1px solid #ccd8d1;border-radius:8px;margin:5px 0 10px}
 .group{border:1px solid #dbe5df;border-radius:10px;padding:12px;margin:8px 0}
 a{color:inherit}.pill{display:inline-block;border-radius:999px;padding:4px 9px;background:#ffffff25;font-size:12px}
 </style></head>
 <body>
-<header><div class="wrap"><div class="nav"><div><h1>Liholiswano</h1><div>BNB Smart Chain savings-group dApp</div></div><div><span class="pill">TESTNET ONLY</span></div></div></div></header>
+<header><div class="wrap"><div class="nav"><div><h1>Liholiswano</h1><div>Customer savings-group dApp</div></div><span class="pill">BNB TESTNET ONLY</span></div></div></header>
 <main class="wrap">
 <section class="card">
-<h2>Connect your wallet</h2>
-<p class="muted">This is the primary customer interface. Use Binance Web3 Wallet or another EVM-compatible wallet. Liholiswano never asks for your seed phrase or private key.</p>
-<button id="connect">Connect Binance Web3 Wallet</button><button id="switch" class="alt">Switch to BNB Testnet</button><button id="refresh" class="alt">Refresh</button>
+<h2>Customer wallet</h2>
+<p class="muted">Connect Binance Web3 Wallet or another EVM-compatible wallet. Your wallet signs every blockchain transaction. Liholiswano never asks for a seed phrase or private key.</p>
+<button id="connect">Connect wallet</button><button id="switch" class="alt">Switch to BNB Testnet</button><button id="refresh" class="alt">Refresh</button>
 <div id="wallet" class="status">Wallet not connected.</div>
 </section>
 <section class="grid">
-<div class="card"><h2>Wallet</h2><div id="walletStats" class="stats"><div class="stat"><b>—</b><span>BNB</span></div><div class="stat"><b>—</b><span>mUSDT</span></div></div></div>
+<div class="card"><h2>Wallet balances</h2><div id="walletStats" class="stats"><div class="stat"><b>—</b><span>tBNB</span></div><div class="stat"><b>—</b><span>Test token</span></div></div></div>
 <div class="card"><h2>Network & contracts</h2><div id="deployment" class="status">Loading public configuration…</div></div>
 </section>
-<section class="card"><h2>My savings groups</h2><p class="muted">Groups are read directly from the Liholiswano smart contract. No WhatsApp account is required for the Testnet dApp journey.</p>
+<section class="card"><h2>Available savings groups</h2><p class="muted">Group state is read directly from the Liholiswano smart contract. WhatsApp is not required for the core Testnet journey.</p>
 <button id="loadGroups">Refresh groups</button><div id="groups" class="status">Connect a wallet or refresh to load groups.</div></section>
-<section class="card"><h2>Selected group</h2><div id="selected" class="status">Select a group above.</div><div class="grid">
+<section class="card"><h2>My selected group</h2><div id="selected" class="status">Select a group above.</div><div class="grid">
 <div><label>Group ID</label><input id="gid" readonly></div>
-<div><label>Bid percentage</label><input id="bid" type="number" min="0" step="0.01" value="0"></div>
+<div><label>Bid percentage</label><input id="bid" type="number" min="0" max="50" step="0.01" value="0"></div>
 </div>
-<button id="join">Join group</button><button id="approve">Approve contribution</button><button id="contribute">Contribute</button><button id="bidBtn">Submit bid</button><button id="settle" class="alt">Settle round</button>
+<button id="join">Join group</button>
+<button id="approveCollateral" class="alt">Approve collateral</button>
+<button id="approveContribution" class="alt">Approve contribution</button>
+<button id="contribute">Contribute</button>
+<button id="bidBtn">Submit bid</button>
+<button id="settle" class="alt">Settle round</button>
 <div id="action" class="status">No transaction started.</div></section>
-<section class="card"><h2>Account services</h2><p class="muted">The blockchain is the financial source of truth. Render remains available for optional profile, compliance, reporting, support and indexing services.</p><a href="./dashboard.html">Open account & operations dashboard →</a></section>
-<section class="card"><h2>Testnet safety</h2><p class="muted">BNB Smart Chain Testnet is chain ID 97. Use test tokens only. Never send real funds to Testnet contracts.</p><div id="safety" class="status"></div></section>
+<section class="card"><h2>Account services</h2><p class="muted">Render provides optional account, compliance, support, indexing and reconciliation services. Testnet wallet transactions execute directly against the smart contract.</p><a href="./dashboard.html">Open account & services dashboard →</a></section>
+<section class="card"><h2>Testnet safety</h2><p class="muted">Chain ID 97 is BNB Smart Chain Testnet. Use test tokens only. This dApp is not a production KYC or real-money access gate.</p><div id="safety" class="status"></div></section>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
 <script src="./config.js"></script>
 <script>
 (()=>{const E=window.ethers,C=window.LIHOLISWANO_CONFIG,$=id=>document.getElementById(id);let provider,signer,address,protocol,token;
-const ABI=[
-"function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)","function settleRound(bytes32)",
-"function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
-"function getMembers(bytes32) view returns(tuple(address account,bool active,bool defaulted,bool wonThisRotation,bool contributedThisRound,bool bidSubmitted,uint256 bidBps,uint32 totalWins,uint256 totalContributed,uint256 totalReceived)[])","function getGroupIds() view returns(bytes32[])"
-];
+const ABI=["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)","function settleRound(bytes32)","function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)","function getMembers(bytes32) view returns(tuple(address account,bool active,bool defaulted,bool wonThisRotation,bool contributedThisRound,bool bidSubmitted,uint256 bidBps,uint32 totalWins,uint256 totalContributed,uint256 totalReceived)[])","function getGroupIds() view returns(bytes32[])"];
 const TOKEN=["function approve(address,uint256) returns(bool)","function balanceOf(address) view returns(uint256)","function allowance(address,address) view returns(uint256)","function decimals() view returns(uint8)","function symbol() view returns(string)"];
-function msg(text,ok=false){$("action").className="status"+(ok?"":" err");$("action").textContent=text}
-function err(e){msg(e?.shortMessage||e?.reason||e?.message||String(e))}
+function msg(text,ok=true){$("action").className="status"+(ok?"":" err");$("action").textContent=text}
+function err(e){msg(e?.shortMessage||e?.reason||e?.message||String(e),false)}
 async function publicConfig(){try{const r=await fetch("https://liholiswano-bnb-api.onrender.com/api/public-config",{cache:"no-store"});if(r.ok)Object.assign(C,await r.json())}catch{}}
-async function ensureProvider(){if(!window.ethereum)throw Error("No wallet provider detected. Open this page inside Binance Web3 Wallet or use a compatible EVM wallet.");if(!provider)provider=new E.BrowserProvider(window.ethereum);return provider}
-async function switchChain(){await ensureProvider();const hex="0x"+Number(C.chainId).toString(16);try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}catch(e){if(e.code!==4902)throw e;await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:C.chainName,nativeCurrency:{name:"tBNB",symbol:"tBNB",decimals:18},rpcUrls:[C.rpcUrl],blockExplorerUrls:[C.explorer]}]})}}
+async function ensureProvider(){if(!window.ethereum)throw Error("No EVM wallet provider detected. Open this page inside Binance Web3 Wallet or another compatible wallet.");if(!provider)provider=new E.BrowserProvider(window.ethereum);return provider}
+async function switchChain(){await ensureProvider();const hex="0x"+Number(C.chainId).toString(16);try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}catch(e){if(e.code!==4902)throw e;await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:C.chainName,nativeCurrency:{name:"tBNB",symbol:"tBNB",decimals:18},rpcUrls:[C.rpcUrl],blockExplorerUrls:[C.explorer]}]);await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}}
 async function connect(){await ensureProvider();await switchChain();signer=await provider.getSigner();address=await signer.getAddress();protocol=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,TOKEN,signer);await refresh()}
-async function refresh(){if(!C.contractAddress||!C.tokenAddress){$("deployment").textContent="Deployment configuration is missing.";return}try{const p=provider||new E.JsonRpcProvider(C.rpcUrl);const n=await p.getNetwork();const pc=await p.getCode(C.contractAddress),tc=await p.getCode(C.tokenAddress);if(pc==="0x"||tc==="0x")throw Error("Configured contracts are not deployed on BNB Testnet.");const [symbol,decimals]=await Promise.all([new E.Contract(C.tokenAddress,TOKEN,p).symbol(),new E.Contract(C.tokenAddress,TOKEN,p).decimals()]);$("deployment").textContent="BNB Smart Chain Testnet (chain 97)\nProtocol: "+C.contractAddress+"\nToken: "+symbol+" ("+decimals+" decimals)\nExplorer: "+C.explorer+"/address/"+C.contractAddress; if(address){const bnb=await p.getBalance(address),bal=await new E.Contract(C.tokenAddress,TOKEN,p).balanceOf(address);$("wallet").textContent="Connected wallet\n"+address+"\nChain: "+n.chainId; $("walletStats").innerHTML="<div class='stat'><b>"+E.formatEther(bnb).slice(0,12)+"</b><span>tBNB</span></div><div class='stat'><b>"+E.formatUnits(bal,decimals)+"</b><span>"+symbol+"</span></div>"}await loadGroups()}catch(e){$("deployment").textContent=e.message;}}
-async function loadGroups(){try{const p=provider||new E.JsonRpcProvider(C.rpcUrl),c=new E.Contract(C.contractAddress,ABI,p),ids=await c.getGroupIds();if(!ids.length){$("groups").textContent="No groups have been created yet.";return}const items=[];for(const id of ids){try{const g=await c.getGroup(id),members=await c.getMembers(id);let label;try{label=E.decodeBytes32String(id)}catch{label=id}const mine=address?members.find(m=>m.account.toLowerCase()===address.toLowerCase()):null;items.push({id,label,g,members,mine})}catch{}}if(!items.length){$("groups").textContent="No readable groups found.";return}$("groups").innerHTML=items.map((x,i)=>"<div class='group'><strong>"+x.label+"</strong><br><span class='muted'>Members "+x.members.filter(m=>m.active).length+" / "+x.g[6]+" · Contribution "+E.formatUnits(x.g[4],C.tokenDecimals)+" · Collateral "+E.formatUnits(x.g[5],C.tokenDecimals)+" · Locked "+x.g[1]+"</span><br><span class='mono'>"+x.id+"</span><br><button data-i='"+i+"'>Use this group</button></div>").join("");$("groups").querySelectorAll("button[data-i]").forEach(b=>b.onclick=()=>selectGroup(items[Number(b.dataset.i)]));window.__groups=items}catch(e){$("groups").textContent=e.message}}
-function selectGroup(x){$("gid").value=x.id;const mine=x.mine;const g=x.g; $("selected").textContent="Group: "+x.label+"\nActive members: "+x.members.filter(m=>m.active).length+" / "+g[6]+"\nRound: "+g[8]+" · Rotation: "+g[9]+"\nContribution: "+E.formatUnits(g[4],C.tokenDecimals)+"\nCollateral: "+E.formatUnits(g[5],C.tokenDecimals)+"\nYour membership: "+(mine?(mine.active?"ACTIVE":"INACTIVE"):"NOT JOINED");}
-async function need(){if(!signer)await connect();if((await provider.getNetwork()).chainId!==97n)await switchChain();if(!protocol)protocol=new E.Contract(C.contractAddress,ABI,signer);if(!token)token=new E.Contract(C.tokenAddress,TOKEN,signer)}
-async function tx(fn){try{await need();msg("Waiting for wallet confirmation…",true);const t=await fn();msg("Transaction submitted: "+t.hash+"\nWaiting for confirmation…",true);const r=await t.wait();msg("Confirmed: "+r.hash+"\n"+C.explorer+"/tx/"+r.hash,true);await refresh()}catch(e){err(e)}}
-$("connect").onclick=()=>tx(async()=>{await connect();return {wait:async()=>({hash:"wallet-connected"})}});$("switch").onclick=async()=>{try{await switchChain();await refresh();msg("Switched to BNB Smart Chain Testnet",true)}catch(e){err(e)}};
+async function refresh(){if(!C.contractAddress||!C.tokenAddress){$("deployment").textContent="Deployment configuration is missing.";return}try{const p=provider||new E.JsonRpcProvider(C.rpcUrl);const n=await p.getNetwork();if(n.chainId!==BigInt(C.chainId))throw Error("Configured RPC is not on BNB Testnet chain 97.");const [pc,tc]=await Promise.all([p.getCode(C.contractAddress),p.getCode(C.tokenAddress)]);if(pc==="0x"||tc==="0x")throw Error("Configured contracts are not deployed on BNB Testnet.");const [symbol,decimals]=await Promise.all([new E.Contract(C.tokenAddress,TOKEN,p).symbol(),new E.Contract(C.tokenAddress,TOKEN,p).decimals()]);$("deployment").textContent="BNB Smart Chain Testnet (chain 97)\nProtocol: "+C.contractAddress+"\nToken: "+symbol+" ("+decimals+" decimals)\nExplorer: "+C.explorer+"/address/"+C.contractAddress;if(address){const bnb=await p.getBalance(address),bal=await new E.Contract(C.tokenAddress,TOKEN,p).balanceOf(address);$("wallet").textContent="Connected wallet\n"+address+"\nChain: "+n.chainId;$("walletStats").innerHTML="<div class='stat'><b>"+E.formatEther(bnb).slice(0,12)+"</b><span>tBNB</span></div><div class='stat'><b>"+E.formatUnits(bal,decimals)+"</b><span>"+symbol+"</span></div>"}await loadGroups()}catch(e){$("deployment").textContent=e.message}}
+async function loadGroups(){try{const p=provider||new E.JsonRpcProvider(C.rpcUrl),c=new E.Contract(C.contractAddress,ABI,p),ids=await c.getGroupIds();if(!ids.length){$("groups").textContent="No groups have been created yet.";return}const items=[];for(const id of ids){try{const g=await c.getGroup(id),members=await c.getMembers(id);let label;try{label=E.decodeBytes32String(id)}catch{label=id}const mine=address?members.find(m=>m.account.toLowerCase()===address.toLowerCase()):null;items.push({id,label,g,members,mine})}catch{}}if(!items.length){$("groups").textContent="No readable groups found.";return}$("groups").innerHTML=items.map((x,i)=>"<div class='group'><strong>"+x.label+"</strong><br><span class='muted'>Members "+x.members.filter(m=>m.active).length+" / "+x.g[6]+" · Contribution "+E.formatUnits(x.g[4],C.tokenDecimals)+" · Collateral "+E.formatUnits(x.g[5],C.tokenDecimals)+" · Round "+x.g[8]+" · Locked "+x.g[1]+"</span><br><span class='mono'>"+x.id+"</span><br><button data-i='"+i+"'>Use this group</button></div>").join("");$("groups").querySelectorAll("button[data-i]").forEach(b=>b.onclick=()=>selectGroup(items[Number(b.dataset.i)]));window.__groups=items}catch(e){$("groups").textContent=e.message}}
+function selectGroup(x){$("gid").value=x.id;const mine=x.mine,g=x.g;$("selected").textContent="Group: "+x.label+"\nActive members: "+x.members.filter(m=>m.active).length+" / "+g[6]+"\nRound: "+g[8]+" · Rotation: "+g[9]+"\nContribution: "+E.formatUnits(g[4],C.tokenDecimals)+"\nCollateral: "+E.formatUnits(g[5],C.tokenDecimals)+"\nYour membership: "+(mine?(mine.active?"ACTIVE":"INACTIVE"):"NOT JOINED")}
+async function need(){if(!signer)await connect();const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId)){await switchChain();signer=await provider.getSigner();protocol=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,TOKEN,signer)}}
+async function waitTx(label,promise){try{await need();msg("Waiting for wallet confirmation…");const tx=await promise();msg("Transaction submitted: "+tx.hash+"\nWaiting for confirmation…");const r=await tx.wait();msg("Confirmed: "+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}catch(e){err(e)}}
+async function selectedGroup(){const gid=$("gid").value.trim();if(!gid)throw Error("Select a group first.");return protocol.getGroup(gid)}
+async function approve(amount,label){await need();if(amount<=0n)throw Error("Approval amount must be greater than zero.");const tx=await token.approve(C.contractAddress,amount);const r=await tx.wait();msg(label+" confirmed.\n"+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}
+$("connect").onclick=async()=>{try{await connect();msg("Wallet connected. Select a group to continue.")}catch(e){err(e)}};
+$("switch").onclick=async()=>{try{await switchChain();await refresh();msg("Switched to BNB Smart Chain Testnet.")}catch(e){err(e)}};
 $("refresh").onclick=()=>refresh();$("loadGroups").onclick=()=>loadGroups();
-$("join").onclick=()=>tx(async()=>{const gid=$("gid").value;if(!gid)throw Error("Select a group first.");const g=await protocol.getGroup(gid);const a=await token.allowance(address,C.contractAddress);if(a<g[5])throw Error("Approve the collateral first.");return protocol.joinGroup(gid)});
-$("approve").onclick=()=>tx(async()=>{const gid=$("gid").value;if(!gid)throw Error("Select a group first.");const g=await protocol.getGroup(gid);return token.approve(C.contractAddress,g[4])});
-$("contribute").onclick=()=>tx(async()=>{const gid=$("gid").value;if(!gid)throw Error("Select a group first.");const g=await protocol.getGroup(gid);const a=await token.allowance(address,C.contractAddress);if(a<g[4])throw Error("Approve the contribution first.");return protocol.contribute(gid)});
-$("bidBtn").onclick=()=>tx(async()=>{const gid=$("gid").value;if(!gid)throw Error("Select a group first.");const b=Number($("bid").value);if(!Number.isFinite(b)||b<0)throw Error("Enter a valid bid.");return protocol.submitBid(gid,Math.round(b*100))});
-$("settle").onclick=()=>tx(async()=>{const gid=$("gid").value;if(!gid)throw Error("Select a group first.");return protocol.settleRound(gid)});
+$("approveCollateral").onclick=async()=>{try{const g=await selectedGroup();await approve(g[5],"Collateral approval")}catch(e){err(e)}};
+$("approveContribution").onclick=async()=>{try{const g=await selectedGroup();await approve(g[4],"Contribution approval")}catch(e){err(e)}};
+$("join").onclick=async()=>{try{await need();const gid=$("gid").value.trim(),g=await selectedGroup();const allowance=await token.allowance(address,C.contractAddress);if(allowance<g[5]){msg("Collateral approval required. Confirm it in your wallet.");const a=await token.approve(C.contractAddress,g[5]);await a.wait()}msg("Confirm the group-join transaction in your wallet.");const tx=await protocol.joinGroup(gid);msg("Transaction submitted: "+tx.hash+"\nWaiting for confirmation…");const r=await tx.wait();msg("Joined group.\n"+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}catch(e){err(e)}};
+$("contribute").onclick=async()=>{try{await need();const gid=$("gid").value.trim(),g=await selectedGroup();const allowance=await token.allowance(address,C.contractAddress);if(allowance<g[4]){msg("Contribution approval required. Confirm it in your wallet.");const a=await token.approve(C.contractAddress,g[4]);await a.wait()}msg("Confirm the contribution transaction in your wallet.");const tx=await protocol.contribute(gid);msg("Transaction submitted: "+tx.hash+"\nWaiting for confirmation…");const r=await tx.wait();msg("Contribution confirmed.\n"+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}catch(e){err(e)}};
+$("bidBtn").onclick=async()=>{try{await need();const b=Number($("bid").value);if(!Number.isFinite(b)||b<0||b>50)throw Error("Enter a bid between 0% and 50%.");const tx=await protocol.submitBid($("gid").value.trim(),Math.round(b*100));msg("Transaction submitted: "+tx.hash+"\nWaiting for confirmation…");const r=await tx.wait();msg("Bid confirmed.\n"+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}catch(e){err(e)}};
+$("settle").onclick=async()=>{try{await need();const tx=await protocol.settleRound($("gid").value.trim());msg("Transaction submitted: "+tx.hash+"\nWaiting for confirmation…");const r=await tx.wait();msg("Round settled.\n"+r.hash+"\n"+C.explorer+"/tx/"+r.hash);await refresh()}catch(e){err(e)}};
 window.ethereum?.on?.("accountsChanged",()=>location.reload());window.ethereum?.on?.("chainChanged",()=>location.reload());
 $("safety").textContent="Network: BNB Smart Chain Testnet · Chain ID 97\nProtocol: "+C.contractAddress+"\nTest token: "+C.tokenAddress+"\nNever enter a seed phrase or private key.";
 publicConfig().then(refresh);
