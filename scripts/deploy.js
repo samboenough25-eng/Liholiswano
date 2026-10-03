@@ -25,7 +25,12 @@ async function main() {
   await mock.waitForDeployment();
 
   const Subscriptions = await ethers.getContractFactory("LiholiswanoSubscriptions");
-  // Subscription charging is disabled during Testnet validation. Keep the contract deployed,\n  // but use the deployer as a non-production placeholder treasury until charging is activated.\n  const subscriptionTreasury = process.env.SUBSCRIPTION_TREASURY_ADDRESS || deployer.address;\n  if (!ethers.isAddress(subscriptionTreasury) || subscriptionTreasury === ethers.ZeroAddress) {\n    throw new Error("SUBSCRIPTION_TREASURY_ADDRESS, when supplied, must be a non-zero EVM address");\n  }
+  // Subscription charging is disabled during Testnet validation. Keep the contract deployed,
+  // but use the deployer as a non-production placeholder treasury until charging is activated.
+  const subscriptionTreasury = process.env.SUBSCRIPTION_TREASURY_ADDRESS || deployer.address;
+  if (!ethers.isAddress(subscriptionTreasury) || subscriptionTreasury === ethers.ZeroAddress) {
+    throw new Error("SUBSCRIPTION_TREASURY_ADDRESS, when supplied, must be a non-zero EVM address");
+  }
   const subscriptions = await Subscriptions.deploy(subscriptionTreasury, mock.target);
   await subscriptions.waitForDeployment();
 
@@ -39,7 +44,8 @@ async function main() {
 
   console.log("LIHOLISWANO_CONTRACT=" + protocol.target);
   console.log("SUBSCRIPTION_CONTRACT=" + subscriptions.target);
-  console.log("SUBSCRIPTION_TREASURY=" + subscriptionTreasury);\n  console.log("SUBSCRIPTIONS_ENABLED=" + (process.env.SUBSCRIPTIONS_ENABLED === "true"));
+  console.log("SUBSCRIPTION_TREASURY=" + subscriptionTreasury);
+  console.log("SUBSCRIPTIONS_ENABLED=" + (process.env.SUBSCRIPTIONS_ENABLED === "true"));
   console.log("TEST_TOKEN_CONTRACT=" + mock.target);
   console.log("DEPLOYER=" + deployer.address);
   console.log("CHAIN_ID=" + network.chainId.toString());
