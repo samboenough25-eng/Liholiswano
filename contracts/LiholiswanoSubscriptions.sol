@@ -13,12 +13,14 @@ contract LiholiswanoSubscriptions {
     address public token;
     bool public paused;
     mapping(bytes32 => bool) public paid;
+    mapping(bytes32 => mapping(uint256 => bool)) public paidCustomerPeriod;
     uint256 private lock = 1;
 
     error Unauthorized();
     error ZeroAddress();
     error Paused();
     error AlreadyPaid();
+    error AlreadyPaidPeriod();
     error InvalidAmount();
     error TransferFailed();
     error TransferMismatch();
@@ -79,6 +81,7 @@ contract LiholiswanoSubscriptions {
     {
         if (subscriptionKey == bytes32(0) || customerKey == bytes32(0) || periodStart == 0 || amount == 0) revert InvalidAmount();
         if (paid[subscriptionKey]) revert AlreadyPaid();
+        if (paidCustomerPeriod[customerKey][periodStart]) revert AlreadyPaidPeriod();
 
         uint256 beforeBalance = IERC20Subscription(token).balanceOf(treasury);
         (bool ok, bytes memory data) = token.call(
@@ -89,6 +92,7 @@ contract LiholiswanoSubscriptions {
         if (afterBalance < beforeBalance || afterBalance - beforeBalance != amount) revert TransferMismatch();
 
         paid[subscriptionKey] = true;
+        paidCustomerPeriod[customerKey][periodStart] = true;
         emit SubscriptionPaid(subscriptionKey, customerKey, msg.sender, token, amount, periodStart);
     }
 }
