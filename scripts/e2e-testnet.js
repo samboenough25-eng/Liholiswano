@@ -204,11 +204,11 @@ async function main() {
   await send("APPROVE_SUBSCRIPTION", token.connect(members[0]).approve(SUBSCRIPTION, subscriptionAmount));
   await send("PAY_SUBSCRIPTION", subscriptions.connect(members[0]).paySubscription(subscriptionKey,customerKey,periodStart,subscriptionAmount));
   if (!(await subscriptions.paid(subscriptionKey))) throw new Error("Subscription payment was not recorded");
-  const treasuryAfter = await token.balanceOf(await subscriptions.treasury());
+  const treasuryAfter = await token.balanceOf(actualTreasury);
   if (treasuryAfter - treasuryBefore !== subscriptionAmount) throw new Error("Subscription treasury amount mismatch");
   console.log("SUBSCRIPTION_E2E=PASS");
   console.log("SUBSCRIPTION_AMOUNT="+ethers.formatUnits(subscriptionAmount,6));
-  console.log("SUBSCRIPTION_TREASURY="+await subscriptions.treasury());
+  console.log("SUBSCRIPTION_TREASURY="+actualTreasury);
 
   await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());
   if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");
