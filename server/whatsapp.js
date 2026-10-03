@@ -36,6 +36,8 @@ function menu(){
     "8. Support",
     "9. Subscription",
     "10. Pay subscription",
+    "11. Wallet setup",
+    "12. KYC status / setup",
     "",
     "Reply with a number to continue."
   ].join("\n");
