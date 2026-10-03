@@ -1,6 +1,10 @@
 name: BNB Testnet ROSCA E2E
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/bnb-testnet-e2e.yml"
   workflow_dispatch:
     inputs:
       testnet_wallet_address:
@@ -34,7 +38,7 @@ jobs:
       - name: Validate MetaMask deployer wallet
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          TESTNET_WALLET_ADDRESS: ${{ inputs.testnet_wallet_address }}
+          TESTNET_WALLET_ADDRESS: ${{ inputs.testnet_wallet_address || '0xb6eB25C6C2C158dcCCA3fE358e6d1EdC784F11D6' }}
         run: |
           test -n "$DEPLOYER_PRIVATE_KEY" || {
             echo "DEPLOYER_PRIVATE_KEY GitHub Actions secret is missing."
@@ -72,7 +76,7 @@ jobs:
       - name: Deploy a fresh isolated Testnet stack
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          SUBSCRIPTION_TREASURY_ADDRESS: ${{ inputs.testnet_wallet_address }}
+          SUBSCRIPTION_TREASURY_ADDRESS: ${{ inputs.testnet_wallet_address || '0xb6eB25C6C2C158dcCCA3fE358e6d1EdC784F11D6' }}
           SUBSCRIPTIONS_ENABLED: "false"
         run: |
           npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy.out
