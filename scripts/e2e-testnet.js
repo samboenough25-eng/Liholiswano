@@ -199,4 +199,14 @@ async function main() {
   console.log("PAYOUT=" + ethers.formatUnits(payout, 6));
   console.log("EXPECTED_PAYOUT=" + ethers.formatUnits(expectedPayout, 6));
   console.log("PROTOCOL_FEE_BPS=" + feeBps.toString());
-  // Subscription charging is intentionally disabled during this Testnet validation cycle.\n  // The subscription contract remains deployed and its pause/unpause controls are still tested.\n  if (process.env.SUBSCRIPTIONS_ENABLED === "true") {\n    throw new Error("SUBSCRIPTIONS_ENABLED=true is not permitted for the no-charge Testnet E2E");\n  }\n  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());\n  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");\n  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());\n  if (await subscriptions.paused()) throw new Error("Subscription vault unpause failed");\n  console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");\n  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
+  // Subscription charging is intentionally disabled during this Testnet validation cycle.
+  // The subscription contract remains deployed and its pause/unpause controls are still tested.
+  if (process.env.SUBSCRIPTIONS_ENABLED === "true") {
+    throw new Error("SUBSCRIPTIONS_ENABLED=true is not permitted for the no-charge Testnet E2E");
+  }
+  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());
+  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");
+  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());
+  if (await subscriptions.paused()) throw new Error("Subscription vault unpause failed");
+  console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");
+  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
