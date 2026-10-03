@@ -4,8 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       testnet_wallet_address:
-        description: "Your MetaMask BNB Testnet wallet address (public address only)"
-        required: true
+        description: "Existing BNB Testnet deployer wallet public address"
+        required: false
+        default: "0xb6eB25C6C2C158dcCCA3fE358e6d1EdC784F11D6"
         type: string
 
 permissions:
@@ -37,29 +38,40 @@ jobs:
         run: |
           test -n "$DEPLOYER_PRIVATE_KEY" || {
             echo "DEPLOYER_PRIVATE_KEY GitHub Actions secret is missing."
-            echo "Use the private key belonging to the existing BNB Testnet deployer wallet."
             exit 1
           }
           node - <<'NODE'
           const { Wallet, getAddress } = require("ethers");
           const expected = process.env.TESTNET_WALLET_ADDRESS;
           const wallet = new Wallet(process.env.DEPLOYER_PRIVATE_KEY);
-          if (!expected) throw new Error("MetaMask testnet wallet address is required.");
+          if (!expected) throw new Error("BNB Testnet deployer wallet address is required.");
           if (getAddress(expected) !== wallet.address) {
-            throw new Error("The MetaMask wallet address does not match DEPLOYER_PRIVATE_KEY.");
+            throw new Error("The wallet address does not match DEPLOYER_PRIVATE_KEY.");
           }
-          console.log("MetaMask testnet wallet address verified:", wallet.address);
+          console.log("Existing BNB Testnet deployer wallet verified:", wallet.address);
           NODE
 
-      - name: Compile BNB contracts
+      - name: Normalize BNB Testnet RPC
         env:
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+        run: |
+          RPC="$(printf '%s' "$BSC_TESTNET_RPC_URL" | tr -d '\r\n')"
+          if [ -z "$RPC" ]; then
+            RPC="https://data-seed-prebsc-1-s1.bnbchain.org:8545"
+          fi
+          case "$RPC" in
+            http://*|https://*) ;;
+            *) echo "BSC_TESTNET_RPC_URL is not a valid HTTP(S) URL after normalization."; exit 1 ;;
+          esac
+          echo "BSC_TESTNET_RPC_URL=$RPC" >> "$GITHUB_ENV"
+          echo "BNB Testnet RPC normalized successfully."
+
+      - name: Compile BNB contracts
         run: npm run compile
 
       - name: Deploy a fresh isolated Testnet stack
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
           SUBSCRIPTION_TREASURY_ADDRESS: ${{ inputs.testnet_wallet_address }}
           SUBSCRIPTIONS_ENABLED: "false"
         run: |
@@ -68,10 +80,10 @@ jobs:
           grep '^SUBSCRIPTION_CONTRACT=' deploy.out | sed 's/^SUBSCRIPTION_CONTRACT=/SUBSCRIPTION_CONTRACT_ADDRESS=/' >> "$GITHUB_ENV"
           grep '^TEST_TOKEN_CONTRACT=' deploy.out >> "$GITHUB_ENV"
           grep '^SUBSCRIPTION_TREASURY=' deploy.out | sed 's/^SUBSCRIPTION_TREASURY=/EXPECTED_SUBSCRIPTION_TREASURY=/' >> "$GITHUB_ENV"
+          echo "Fresh Testnet deployment addresses captured."
 
       - name: Run controlled Testnet ROSCA cycle
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
           SUBSCRIPTIONS_ENABLED: "false"
         run: node scripts/e2e-testnet.js
