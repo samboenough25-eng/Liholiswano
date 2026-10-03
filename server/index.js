@@ -38,11 +38,11 @@ app.use("/api/auth",rateLimit({windowMs:15*60*1000,max:25,standardHeaders:true,l
 
 function db(){if(!pool) throw new Error("DATABASE_URL is not configured.");return pool;}
 
-async function issueEmailVerification(userId,email){
+async function issueEmailVerification(userId,email,queryable=db()){
   const code=String(crypto.randomInt(0,1000000)).padStart(6,"0");
   const tokenHash=crypto.createHash("sha256").update(code).digest("hex");
-  await db().query("update auth_tokens set used_at=now() where user_id=$1 and purpose='email_verify' and used_at is null",[userId]);
-  await db().query("insert into auth_tokens(user_id,token_hash,purpose,expires_at) values($1,$2,'email_verify',now()+interval '15 minutes')",[userId,tokenHash]);
+  await queryable.query("update auth_tokens set used_at=now() where user_id=$1 and purpose='email_verify' and used_at is null",[userId]);
+  await queryable.query("insert into auth_tokens(user_id,token_hash,purpose,expires_at) values($1,$2,'email_verify',now()+interval '15 minutes')",[userId,tokenHash]);
   if(process.env.EMAIL_DEV_MODE==="true") return {delivered:false,devCode:code};
   if(!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM) throw new Error("Email verification provider is not configured");
   const response=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+process.env.RESEND_API_KEY},body:JSON.stringify({from:process.env.EMAIL_FROM,to:[email],subject:"Liholiswano email verification code",html:"<p>Your Liholiswano verification code is:</p><p style=\"font-size:28px;font-weight:700;letter-spacing:6px\">"+code+"</p><p>This code expires in 15 minutes.</p>"})});
@@ -143,6 +143,7 @@ const registerSchema=z.object({
   phone:z.string().trim().min(7).max(30).optional()
 });
 app.post("/api/auth/register",async(req,res)=>{
+  let client=null;
   try{
     const body=registerSchema.parse(req.body);
     const email=body.email.toLowerCase();
@@ -150,21 +151,25 @@ app.post("/api/auth/register",async(req,res)=>{
     if(body.phone&&!normalizedPhone)return res.status(400).json({error:"Invalid phone number"});
     if(process.env.EMAIL_VERIFICATION_REQUIRED==="true" && process.env.EMAIL_DEV_MODE!=="true" && (!process.env.RESEND_API_KEY||!process.env.EMAIL_FROM)) return res.status(503).json({error:"Email verification is required but the email provider is not configured"});
     const passwordHash=await bcrypt.hash(body.password,12);
-    const r=await db().query(
+    client=await db().connect();
+    await client.query("BEGIN");
+    const r=await client.query(
       "insert into users(email,password_hash,country,phone) values($1,$2,$3,$4) returning id,email,role,status,country,phone,kyc_status",
       [email,passwordHash,body.country,normalizedPhone]
     );
     const user=r.rows[0];
-    await db().query("insert into subscription_accounts(user_id,currency,monthly_fiat_minor,active,next_due_date) values($1,$2,500,true,date_trunc('month',now())::date) on conflict(user_id) do nothing",[user.id,user.country==="BW"?"P":"E"]);
-    await db().query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country,subscription:"P/E5 monthly"})]);
+    await client.query("insert into subscription_accounts(user_id,currency,monthly_fiat_minor,active,next_due_date) values($1,$2,500,true,date_trunc('month',now())::date) on conflict(user_id) do nothing",[user.id,user.country==="BW"?"P":"E"]);
+    await client.query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country,subscription:"P/E5 monthly"})]);
     let verification=null;
-    if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email);
+    if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email,client);
+    await client.query("COMMIT");
     res.status(201).json({user,emailVerificationRequired:process.env.EMAIL_VERIFICATION_REQUIRED==="true",verification,token:sign(user)});
   }catch(e){
+    if(client){try{await client.query("ROLLBACK")}catch{}}
     if(e.name==="ZodError") return res.status(400).json({error:"Invalid registration data",details:e.issues.map(x=>x.path.join(".")+": "+x.message)});
     if(e.code==="23505") return res.status(409).json({error:"An account with that email already exists"});
     console.error(e); res.status(500).json({error:"Registration failed"});
-  }
+  }finally{if(client)client.release();}
 });
 
 app.post("/api/auth/email-verification/request",auth,async(req,res)=>{try{const u=await db().query("select email,email_verified_at from users where id=$1",[req.user.id]);if(!u.rowCount)return res.status(404).json({error:"User not found"});if(u.rows[0].email_verified_at)return res.json({verified:true});const result=await issueEmailVerification(req.user.id,u.rows[0].email);res.json({verified:false,...result});}catch(e){console.error(e);res.status(503).json({error:"Unable to send email verification code"})}});
