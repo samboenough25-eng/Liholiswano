@@ -13,9 +13,9 @@ permissions:
 
 jobs:
   testnet-e2e:
-    name: Run BNB Testnet ROSCA cycle
+    name: Run fresh BNB Testnet ROSCA cycle
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Checkout BNB application branch
         uses: actions/checkout@v4
@@ -37,7 +37,7 @@ jobs:
         run: |
           test -n "$DEPLOYER_PRIVATE_KEY" || {
             echo "DEPLOYER_PRIVATE_KEY GitHub Actions secret is missing."
-            echo "Set it to the private key of the MetaMask wallet used as the BNB Testnet deployer/funder."
+            echo "Use the private key belonging to the existing BNB Testnet deployer wallet."
             exit 1
           }
           node - <<'NODE'
@@ -51,10 +51,31 @@ jobs:
           console.log("MetaMask testnet wallet address verified:", wallet.address);
           NODE
 
+      - name: Compile BNB contracts
+        env:
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
+        run: npm run compile
+
+      - name: Deploy a fresh isolated Testnet stack
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
+          SUBSCRIPTION_TREASURY_ADDRESS: ${{ inputs.testnet_wallet_address }}
+          SUBSCRIPTIONS_ENABLED: "false"
+        run: |
+          npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy.out
+          grep '^LIHOLISWANO_CONTRACT=' deploy.out >> "$GITHUB_ENV"
+          grep '^SUBSCRIPTION_CONTRACT=' deploy.out | sed 's/^SUBSCRIPTION_CONTRACT=/SUBSCRIPTION_CONTRACT_ADDRESS=/' >> "$GITHUB_ENV"
+          grep '^TEST_TOKEN_CONTRACT=' deploy.out >> "$GITHUB_ENV"
+          grep '^SUBSCRIPTION_TREASURY=' deploy.out | sed 's/^SUBSCRIPTION_TREASURY=/EXPECTED_SUBSCRIPTION_TREASURY=/' >> "$GITHUB_ENV"
+
       - name: Run controlled Testnet ROSCA cycle
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
-          BNB_CONTRACT_ADDRESS: "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014"
-          TEST_TOKEN_CONTRACT: "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29"
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
+          BNB_CONTRACT_ADDRESS: ${{ env.LIHOLISWANO_CONTRACT }}
+          SUBSCRIPTION_CONTRACT_ADDRESS: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
+          TEST_TOKEN_CONTRACT: ${{ env.TEST_TOKEN_CONTRACT }}
+          EXPECTED_SUBSCRIPTION_TREASURY: ${{ env.EXPECTED_SUBSCRIPTION_TREASURY }}
+          SUBSCRIPTIONS_ENABLED: "false"
         run: node scripts/e2e-testnet.js
