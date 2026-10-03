@@ -101,15 +101,20 @@ async function verifyCursor(cursor){
 }
 async function fetchLogsAdaptive(fromBlock,toBlock){
  if(fromBlock>toBlock)return [];
- try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
- catch(e){
-  const message=String(e?.shortMessage||e?.message||e);
-  const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
-  if(!retryable||fromBlock===toBlock)throw e;
-  const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
-  await new Promise(r=>setTimeout(r,1000));
-  return (await fetchLogsAdaptive(fromBlock,mid)).concat(await fetchLogsAdaptive(mid+1,toBlock));
+ let lastError;
+ for(let attempt=0;attempt<4;attempt++){
+  try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
+  catch(e){
+   lastError=e;
+   const message=String(e?.shortMessage||e?.message||e);
+   const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
+   if(!retryable)throw e;
+   await new Promise(r=>setTimeout(r,Math.min(8000,1000*(2**attempt))));
+  }
  }
+ if(fromBlock===toBlock)throw lastError;
+ const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
+ return (await fetchLogsAdaptive(fromBlock,mid)).concat(await fetchLogsAdaptive(mid+1,toBlock));
 }
 async function rangeLogs(from,to){
  return fetchLogsAdaptive(from,to);
