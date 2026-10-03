@@ -69,14 +69,29 @@ async function accountText(user) {
 }
 
 async function listGroups(db, user) {
-  const q = await db.query(
+  const mine = await db.query(
     "select g.name,g.onchain_group_id,g.country,m.status from group_memberships m join groups g on g.id=m.group_id where m.user_id=$1 order by m.joined_at desc",
     [user.id]
   );
-  if (!q.rowCount) return "You are not currently in a ROSCA.";
-  return ["My groups", ...q.rows.map((x,i) =>
-    (i + 1) + ". " + x.name + " [" + x.status + "]\n   " + x.onchain_group_id
-  )].join("\n");
+  const available = await db.query(
+    "select g.name,g.onchain_group_id,g.country,g.status,count(m.id)::int member_count from groups g left join group_memberships m on m.group_id=g.id and m.status in ('active','pending') where g.country=$1 and g.status<>'suspended' group by g.id order by g.created_at desc limit 20",
+    [user.country]
+  );
+  const lines = ["ROSCA groups"];
+  if (mine.rowCount) {
+    lines.push("", "My groups", ...mine.rows.map((x,i) =>
+      (i + 1) + ". " + x.name + " [" + x.status + "]\n   " + x.onchain_group_id
+    ));
+  } else {
+    lines.push("", "My groups", "You are not currently in a ROSCA.");
+  }
+  if (available.rowCount) {
+    lines.push("", "Available in " + user.country, ...available.rows.map((x,i) =>
+      (i + 1) + ". " + x.name + " [" + x.status + ", " + x.member_count + " members]\n   " + x.onchain_group_id
+    ));
+    lines.push("", "To request membership, send JOIN <group ID>.");
+  }
+  return lines.join("\n");
 }
 
 async function balanceText(db, user) {
@@ -220,6 +235,15 @@ async function handleCommand({ phone, text, db, contactId, messageId }) {
   if (!user.phone_verified_at)
     return "This WhatsApp number is registered but not verified. Use LINK <6-digit code> from your Liholiswano account.";
 
+  if (normalized === "wallet" || normalized === "wallets") {
+    const base = process.env.PUBLIC_WEB_URL || "https://liholiswano-bnb-web.onrender.com";
+    return ["Wallet setup", "Your BNB wallet must be verified before financial actions.", "Open:", base + "/dashboard.html", "", "Connect your BNB Testnet wallet and complete wallet ownership verification. Never send your seed phrase or private key to Liholiswano."].join("\n");
+  }
+  if (normalized === "kyc") {
+    const base = process.env.PUBLIC_WEB_URL || "https://liholiswano-bnb-web.onrender.com";
+    return ["KYC", "Current status: " + user.kyc_status, "Open your customer dashboard to complete or review KYC:", base + "/dashboard.html", "", "Testnet pilot KYC may use authorized manual review. Production biometric and AML screening remain separate activation gates."].join("\n");
+  }
+  if (normalized === "status") return accountText(user);
   if (normalized === "help") return help();
   if (normalized === "1" || normalized === "account") return accountText(user);
   if (normalized === "2") return "Send JOIN <group ID>.";
