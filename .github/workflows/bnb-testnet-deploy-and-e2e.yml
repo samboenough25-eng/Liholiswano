@@ -122,5 +122,5 @@ jobs:
             echo "- Chain ID: `97`"
             echo "- Full ROSCA E2E: passed\n- Subscription contract: deployed and pause/unpause tested\n- Subscription charging: disabled for this Testnet validation cycle"
             echo ""
-            echo "This workflow does not change Render configuration."
+            echo "Verified addresses are committed to web/config.js after E2E; Render auto-deploys the updated branch."
           } >> "$GITHUB_STEP_SUMMARY"
