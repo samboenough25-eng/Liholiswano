@@ -1,52 +1,14 @@
-const { ethers } = require("hardhat");
-
-async function main() {
-  const [owner, a, b, c] = await ethers.getSigners();
-  const Token = await ethers.getContractFactory("MockUSDT");
-  const token = await Token.deploy(owner.address, ethers.parseUnits("1000000", 6));
-  await token.waitForDeployment();
-
-  const App = await ethers.getContractFactory("Liholiswano");
-  const app = await App.deploy(owner.address, 100);
-  await app.waitForDeployment();
-  await (await app.setApprovedToken(token.target, true)).wait();
-
-  const members = [a, b, c];
-  for (const m of members) {
-    await (await token.mint(m.address, ethers.parseUnits("1000", 6))).wait();
-    await (await token.connect(m).approve(app.target, ethers.MaxUint256)).wait();
-  }
-
-  const id = ethers.encodeBytes32String("E2E001");
-  const contribution = ethers.parseUnits("100", 6);
-  const collateral = ethers.parseUnits("50", 6);
-
-  await (await app.connect(a).createGroup(id, token.target, contribution, collateral, 2000, 3)).wait();
-  for (const m of members) await (await app.connect(m).joinGroup(id)).wait();
-  for (const m of members) await (await app.connect(m).contribute(id)).wait();
-  await (await app.connect(a).submitBid(id, 500)).wait();
-  await (await app.connect(b).submitBid(id, 1500)).wait();
-  await (await app.connect(c).submitBid(id, 1000)).wait();
-
-  const before = await token.balanceOf(b.address);
-  await (await app.settleRound(id)).wait();
-  const after = await token.balanceOf(b.address);
-  const expectedPayout = ethers.parseUnits("255", 6);
-
-  if (after - before !== expectedPayout) throw new Error("Unexpected winner payout");
-  const member = await app.getMember(id, b.address);
-  if (member.totalWins !== 1n) throw new Error("Winner was not recorded");
-  if (await app.protocolFeeBps() !== 100n) throw new Error("Protocol fee configuration mismatch");
-
-  console.log("LOCAL_E2E=PASS");
-  console.log("GROUP=E2E001");
-  console.log("WINNER=" + b.address);
-  console.log("PAYOUT=255.000000");
-  console.log("PROTOCOL_FEE_BPS=100");
-  console.log("ROTATION=" + (await app.getGroup(id))[9].toString());
+const {ethers}=require("hardhat");
+async function main(){
+ const [owner,...users]=await ethers.getSigners();const T=await ethers.getContractFactory("MockUSDT");const token=await T.deploy(owner.address,ethers.parseUnits("1000000",6));await token.waitForDeployment();
+ const F=await ethers.getContractFactory("Liholiswano");const app=await F.deploy(owner.address,0);await app.waitForDeployment();await app.setApprovedToken(token.target,true);
+ const id=await app.nextTierId(),payout=ethers.parseUnits("1000",6),collateral=ethers.parseUnits("200",6),contribution=ethers.parseUnits("100",6);
+ await app.createTier(token.target,payout,collateral,3600);
+ for(const u of users.slice(0,11)){await token.mint(u.address,ethers.parseUnits("5000",6));await token.connect(u).approve(app.target,ethers.MaxUint256);await app.connect(u).joinTier(id);}
+ const recipient=(await app.getCurrentPayout(id))[2];
+ let funded=0;for(const u of users.slice(0,11)){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await app.connect(u).reserveNextFunder(id);await app.connect(u).fundCurrent(id);funded++;}
+ if(funded!==10)throw new Error("Expected ten successful funders");const after=await token.balanceOf(recipient);if(after!==payout)throw new Error("Recipient did not receive Tier 1 payout");
+ const part=await app.getParticipant(id,recipient);if(part.receivedCount!==1n)throw new Error("Recipient was not recorded");if(part.queueIndex!==11n)throw new Error("Recipient was not requeued at the back");
+ console.log("LOCAL_E2E=PASS");console.log("TIER_ID="+id);console.log("PAYOUT=1000.000000");console.log("CONTRIBUTION=100.000000");console.log("FUNDERS="+funded);console.log("RECIPIENT="+recipient);
 }
-
-main().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+main().catch(e=>{console.error(e);process.exitCode=1;});
