@@ -3,7 +3,7 @@ const RPC=process.env.BSC_TESTNET_RPC_URL||"https://data-seed-prebsc-1-s1.bnbcha
 if(!KEY||!CONTRACT||!TOKEN||!SUB)throw new Error("Fresh deployment addresses and DEPLOYER_PRIVATE_KEY are required");
 const provider=new ethers.JsonRpcProvider(RPC),owner=new ethers.Wallet(KEY,provider);
 const token=new ethers.Contract(TOKEN,["function mint(address,uint256)","function transfer(address,uint256) returns(bool)","function approve(address,uint256) returns(bool)","function balanceOf(address) view returns(uint256)"],owner);
-const app=new ethers.Contract(CONTRACT,["function createTier(address,uint256,uint256,uint256)","function getTierIds() view returns(uint256[])","function getCurrentPayout(uint256) view returns(bool,uint256,address,uint256,uint256,uint256)","function joinTier(uint256)","function reserveNextFunder(uint256)","function fundCurrent(uint256)","function defaultFunder(uint256,address)","function getParticipant(uint256,address) view returns(bool,bool,uint256,uint256,uint256,uint256,uint256)","function approvedToken(address) view returns(bool)","function pause()","function unpause()","function paused() view returns(bool)"],owner);
+const app=new ethers.Contract(CONTRACT,["function createTier(address,uint256,uint256,uint256)","function getTierIds() view returns(uint256[])","function getCurrentPayout(uint256) view returns(bool,uint256,address,uint256,uint256,uint256)","function joinTier(uint256)","function reserveFunder(uint256)","function fundCurrent(uint256)","function defaultFunder(uint256,address)","function getParticipant(uint256,address) view returns(bool,bool,uint256,uint256,uint256,uint256,uint256)","function approvedToken(address) view returns(bool)","function pause()","function unpause()","function paused() view returns(bool)"],owner);
 const sub=new ethers.Contract(SUB,["function treasury() view returns(address)","function token() view returns(address)","function pause()","function unpause()","function paused() view returns(bool)"],owner);
 async function send(label,p){const tx=await p;console.log(label+"_TX="+tx.hash);return tx.wait();}
 async function main(){
@@ -16,7 +16,7 @@ async function main(){
  await send("PAUSE_PROTOCOL",app.pause());if(!(await app.paused()))throw new Error("Pause failed");await send("UNPAUSE_PROTOCOL",app.unpause());if(await app.paused())throw new Error("Unpause failed");
  for(let i=0;i<users.length;i++)await send("JOIN_MEMBER_"+(i+1),app.connect(users[i]).joinTier(id));
  const cp=await app.getCurrentPayout(id),recipient=cp[2],beforePayout=await token.balanceOf(recipient);let funded=0;
- for(const u of users){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await send("RESERVE_"+(++funded),app.connect(u).reserveNextFunder(id));await send("FUND_"+funded,app.connect(u).fundCurrent(id));}
+ for(const u of users){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await send("RESERVE_"+(++funded),app.connect(u).reserveFunder(id));await send("FUND_"+funded,app.connect(u).fundCurrent(id));}
  const payoutBal=await token.balanceOf(recipient);if(payoutBal-beforePayout!==ethers.parseUnits("1000",6))throw new Error("Recipient payout mismatch: "+ethers.formatUnits(payoutBal,6));
  const rp=await app.getParticipant(id,recipient);if(rp[4]!==1n||rp[3]!==11n)throw new Error("Recipient was not requeued correctly");
  const treasury=await sub.treasury();if(treasury.toLowerCase()!==owner.address.toLowerCase())throw new Error("Subscription treasury mismatch");if((await sub.token()).toLowerCase()!==TOKEN.toLowerCase())throw new Error("Subscription token mismatch");
