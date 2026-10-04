@@ -53,6 +53,7 @@ contract Liholiswano {
   uint256 deadline;
   address recipient;
   address currentFunder;
+  mapping(address=>bool) fundedBy;
  }
  mapping(uint256=>Tier) private tiers;
  mapping(uint256=>mapping(address=>Participant)) private participants;
