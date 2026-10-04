@@ -2,9 +2,17 @@ name: BNB Testnet Deploy and Full E2E
 
 on:
   workflow_dispatch:
+  push:
+    branches: [bnb-app-complete]
+    paths:
+      - ".github/workflows/bnb-testnet-deploy-and-e2e.trigger"
 
 permissions:
   contents: write
+
+concurrency:
+  group: bnb-testnet-deploy-and-e2e
+  cancel-in-progress: false
 
 jobs:
   deploy-and-e2e:
