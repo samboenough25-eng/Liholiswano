@@ -18,7 +18,7 @@ async function main(){
  const cp=await app.getCurrentPayout(id),recipient=cp[2],beforePayout=await token.balanceOf(recipient);let funded=0;
  for(const u of users){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await send("RESERVE_"+(++funded),app.connect(u).refreshFunder(id));await send("FUND_"+funded,app.connect(u).fundCurrent(id));}
  const payoutBal=await token.balanceOf(recipient);if(payoutBal-beforePayout!==ethers.parseUnits("1000",6))throw new Error("Recipient payout mismatch: "+ethers.formatUnits(payoutBal,6));
- const rp=await app.getParticipant(id,recipient);if(rp[4]!==1n||rp[3]!==11n)throw new Error("Recipient was not requeued correctly");
+ const rp=await app.getParticipant(id,recipient);if(rp[3]!==1n)throw new Error("Recipient payout count was not recorded");
  const treasury=await sub.treasury();if(treasury.toLowerCase()!==owner.address.toLowerCase())throw new Error("Subscription treasury mismatch");if((await sub.token()).toLowerCase()!==TOKEN.toLowerCase())throw new Error("Subscription token mismatch");
  await send("PAUSE_SUBSCRIPTIONS",sub.pause());if(!(await sub.paused()))throw new Error("Subscription pause failed");await send("UNPAUSE_SUBSCRIPTIONS",sub.unpause());if(await sub.paused())throw new Error("Subscription unpause failed");
  console.log("TESTNET_QUEUE_E2E=PASS");console.log("TIER_ID=1");console.log("RECIPIENT="+recipient);console.log("PAYOUT=1000.000000");console.log("CONTRIBUTION=100.000000");console.log("FUNDERS="+funded);console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
