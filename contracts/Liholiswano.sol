@@ -227,7 +227,7 @@ contract Liholiswano {
   if(!po.exists||po.paid||po.funderCount>=FUNDERS_PER_PAYOUT||po.currentFunder!=address(0))return;
   address candidate=t.head;
   for(uint256 i=0;i<MAX_QUEUE_SCAN;i++){
-   if(candidate==address(0))revert NoEligibleFunder();
+   if(candidate==address(0))return;
    if(candidate!=po.recipient&&!po.fundedBy[candidate]){
     Participant storage p=participants[id][candidate];
     if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired){
