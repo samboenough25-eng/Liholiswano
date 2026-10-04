@@ -41,7 +41,8 @@ $("waLink").onclick=async()=>{try{if(!token)throw Error("Sign in first.");const 
 $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value,password:$("password").value})});token=d.token;localStorage.setItem("lhs_token",token);await refresh()}catch(e){$("status").textContent=e.message}};
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
 $("groups").onclick=refresh;$("activity").onclick=refresh;let currentKycCase=null;
-function escapeHtml(v){return String(v??"").replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;","'":"&#39;"}[c]));}\nfunction renderGroups(groups){
+function escapeHtml(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");}
+function renderGroups(groups){
   if(!groups?.length){$("groupsOut").textContent="No savings groups are available yet.";return;}
   $("groupsOut").innerHTML=groups.map(g=>{
     const id=String(g.onchain_group_id||"");
