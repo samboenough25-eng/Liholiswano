@@ -254,7 +254,7 @@ contract Liholiswano {
 
  function isFunderEligible(uint256 id,address a) external view returns(bool){
   Tier storage t=_tier(id);Participant storage p=participants[id][a];Payout storage po=payouts[id][payoutNumber[id]];
-  return p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=po.recipient&&po.currentFunder==address(0)&&po.funderCount<FUNDERS_PER_PAYOUT;
+  return p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=po.recipient&&!po.fundedBy[a]&&po.currentFunder==address(0)&&po.funderCount<FUNDERS_PER_PAYOUT;
  }
 
  function getTier(uint256 id) external view returns(Tier memory){return _tier(id);}
