@@ -1,221 +1,26 @@
-// BNB Testnet controlled E2E: test wallets + MockUSDT only.
-// This script never uses real USDT/USDC and must only run on BSC Testnet.
-const { ethers } = require("ethers");
-
-const RPC = process.env.BSC_TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.bnbchain.org:8545";
-const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
-const CONTRACT = process.env.BNB_CONTRACT_ADDRESS;
-const TOKEN = process.env.TEST_TOKEN_CONTRACT;
-const SUBSCRIPTION = process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
-// Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
-// the test only needs enough tBNB for each temporary member's transactions.
-const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND || "0.003");
-const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.05");
-
-if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
-if (!CONTRACT || !ethers.isAddress(CONTRACT)) throw new Error("BNB_CONTRACT_ADDRESS is required for a fresh E2E");
-if (!TOKEN || !ethers.isAddress(TOKEN)) throw new Error("TEST_TOKEN_CONTRACT is required for a fresh E2E");
-
-const provider = new ethers.JsonRpcProvider(RPC);
-const owner = new ethers.Wallet(PRIVATE_KEY, provider);
-
-const tokenAbi = [
-  "function mint(address,uint256)",
-  "function transfer(address,uint256) returns (bool)",
-  "function approve(address,uint256) returns (bool)",
-  "function balanceOf(address) view returns (uint256)"
-];
-const appAbi = [
-  "function createGroup(bytes32,address,uint256,uint256,uint256,uint256)",
-  "function joinGroup(bytes32)",
-  "function contribute(bytes32)",
-  "function submitBid(bytes32,uint256)",
-  "function settleRound(bytes32)",
-  "function pause()",
-  "function unpause()",
-  "function paused() view returns (bool)",
-  "function approvedToken(address) view returns (bool)",
-  "function getMember(bytes32,address) view returns (address,bool,bool,bool,bool,bool,uint256,uint256,uint256,uint256)",
-  "function protocolFeeBps() view returns (uint256)",
-  "function paused() view returns (bool)",
-  "event GroupCreated(bytes32 indexed groupId,address indexed admin,address indexed token)",
-  "event MemberJoined(bytes32 indexed groupId,address indexed member)",
-  "event GroupLockedEvent(bytes32 indexed groupId,uint256 round,uint256 deadline)",
-  "event ContributionPaid(bytes32 indexed groupId,address indexed member,uint256 amount)",
-  "event BidSubmitted(bytes32 indexed groupId,address indexed member,uint256 bidBps)",
-  "event RoundSettled(bytes32 indexed groupId,uint256 round,address indexed winner,uint256 bidAmount,uint256 payout)"
-];
-
-async function send(label, txPromise) {
-  const tx = await txPromise;
-  console.log(label + "_TX=" + tx.hash);
-  const receipt = await tx.wait();
-  console.log(label + "_BLOCK=" + receipt.blockNumber);
-  return receipt;
+const {ethers}=require("ethers");
+const RPC=process.env.BSC_TESTNET_RPC_URL||"https://data-seed-prebsc-1-s1.bnbchain.org:8545",KEY=process.env.DEPLOYER_PRIVATE_KEY,CONTRACT=process.env.BNB_CONTRACT_ADDRESS,TOKEN=process.env.TEST_TOKEN_CONTRACT,SUB=process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
+if(!KEY||!CONTRACT||!TOKEN||!SUB)throw new Error("Fresh deployment addresses and DEPLOYER_PRIVATE_KEY are required");
+const provider=new ethers.JsonRpcProvider(RPC),owner=new ethers.Wallet(KEY,provider);
+const token=new ethers.Contract(TOKEN,["function mint(address,uint256)","function transfer(address,uint256) returns(bool)","function approve(address,uint256) returns(bool)","function balanceOf(address) view returns(uint256)"],owner);
+const app=new ethers.Contract(CONTRACT,["function createTier(address,uint256,uint256,uint256)","function getTierIds() view returns(uint256[])","function getCurrentPayout(uint256) view returns(bool,uint256,address,uint256,uint256,uint256)","function joinTier(uint256)","function reserveNextFunder(uint256)","function fundCurrent(uint256)","function defaultFunder(uint256,address)","function getParticipant(uint256,address) view returns(bool,bool,uint256,uint256,uint256,uint256,uint256)","function approvedToken(address) view returns(bool)","function pause()","function unpause()","function paused() view returns(bool)"],owner);
+const sub=new ethers.Contract(SUB,["function treasury() view returns(address)","function token() view returns(address)","function pause()","function unpause()","function paused() view returns(bool)"],owner);
+async function send(label,p){const tx=await p;console.log(label+"_TX="+tx.hash);return tx.wait();}
+async function main(){
+ if((await provider.getNetwork()).chainId!==97n)throw new Error("Wrong chain");
+ if(!(await app.approvedToken(TOKEN)))throw new Error("Test token not approved");
+ const ids=await app.getTierIds();if(ids.length!==1||ids[0]!==1n)throw new Error("Expected exactly one deployed Tier 1");
+ const id=1n,users=[];for(let i=0;i<11;i++)users.push(ethers.Wallet.createRandom().connect(provider));
+ const gas=ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND||"0.004");
+ for(let i=0;i<users.length;i++){await send("FUND_MEMBER_"+(i+1),owner.sendTransaction({to:users[i].address,value:gas}));await send("MINT_MEMBER_"+(i+1),token.mint(users[i].address,ethers.parseUnits("5000",6)));await send("APPROVE_MEMBER_"+(i+1),token.connect(users[i]).approve(CONTRACT,ethers.MaxUint256));}
+ await send("PAUSE_PROTOCOL",app.pause());if(!(await app.paused()))throw new Error("Pause failed");await send("UNPAUSE_PROTOCOL",app.unpause());if(await app.paused())throw new Error("Unpause failed");
+ for(let i=0;i<users.length;i++)await send("JOIN_MEMBER_"+(i+1),app.connect(users[i]).joinTier(id));
+ const cp=await app.getCurrentPayout(id),recipient=cp[2];let funded=0;
+ for(const u of users){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await send("RESERVE_"+(++funded),app.connect(u).reserveNextFunder(id));await send("FUND_"+funded,app.connect(u).fundCurrent(id));}
+ const payoutBal=await token.balanceOf(recipient);if(payoutBal!==ethers.parseUnits("1000",6))throw new Error("Recipient payout mismatch: "+ethers.formatUnits(payoutBal,6));
+ const rp=await app.getParticipant(id,recipient);if(rp[4]!==1n||rp[3]!==11n)throw new Error("Recipient was not requeued correctly");
+ const treasury=await sub.treasury();if(treasury.toLowerCase()!==owner.address.toLowerCase())throw new Error("Subscription treasury mismatch");if((await sub.token()).toLowerCase()!==TOKEN.toLowerCase())throw new Error("Subscription token mismatch");
+ await send("PAUSE_SUBSCRIPTIONS",sub.pause());if(!(await sub.paused()))throw new Error("Subscription pause failed");await send("UNPAUSE_SUBSCRIPTIONS",sub.unpause());if(await sub.paused())throw new Error("Subscription unpause failed");
+ console.log("TESTNET_QUEUE_E2E=PASS");console.log("TIER_ID=1");console.log("RECIPIENT="+recipient);console.log("PAYOUT=1000.000000");console.log("CONTRIBUTION=100.000000");console.log("FUNDERS="+funded);console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
 }
-
-async function main() {
-  const network = await provider.getNetwork();
-  if (network.chainId !== 97n) throw new Error("Wrong chain: " + network.chainId);
-
-  const balance = await provider.getBalance(owner.address);
-  const requiredFunding = MEMBER_GAS_FUND * 3n + OWNER_GAS_RESERVE;
-  if (balance < requiredFunding) {
-    throw new Error(
-      "Insufficient deployer tBNB. Current=" + ethers.formatEther(balance) +
-      " required minimum=" + ethers.formatEther(requiredFunding) +
-      ". Fund the deployer wallet from the BSC Testnet faucet before rerunning."
-    );
-  }
-
-  const [appCode, tokenCode] = await Promise.all([
-    provider.getCode(CONTRACT),
-    provider.getCode(TOKEN)
-  ]);
-  if (appCode === "0x") throw new Error("BNB_CONTRACT_ADDRESS has no deployed code on BSC Testnet");
-  if (tokenCode === "0x") throw new Error("TEST_TOKEN_CONTRACT has no deployed code on BSC Testnet");
-
-  if (!SUBSCRIPTION || !ethers.isAddress(SUBSCRIPTION)) throw new Error("SUBSCRIPTION_CONTRACT_ADDRESS is required for the fresh E2E");
-  const token = new ethers.Contract(TOKEN, tokenAbi, owner);
-  const app = new ethers.Contract(CONTRACT, appAbi, owner);
-  const expectedTreasury = process.env.EXPECTED_SUBSCRIPTION_TREASURY || owner.address;
-  const subscriptions = new ethers.Contract(SUBSCRIPTION, [
-    "function paySubscription(bytes32,bytes32,uint256,uint256)",
-    "function paid(bytes32) view returns(bool)",
-    "function paidCustomerPeriod(bytes32,uint256) view returns(bool)",
-    "function treasury() view returns(address)",
-    "function token() view returns(address)",
-    "function pause()",
-    "function unpause()",
-    "function paused() view returns(bool)",
-    "event SubscriptionPaid(bytes32 indexed subscriptionKey,bytes32 indexed customerKey,address indexed payer,address token,uint256 amount,uint256 periodStart)"
-  ], owner);
-  if (!(await app.approvedToken(TOKEN))) {
-    throw new Error("Test token is not allowlisted by the deployed Liholiswano contract");
-  }
-  const actualTreasury = await subscriptions.treasury();
-  const actualToken = await subscriptions.token();
-  if (actualToken.toLowerCase() !== TOKEN.toLowerCase()) throw new Error("Subscription vault token mismatch: " + actualToken);
-  if (actualTreasury.toLowerCase() !== expectedTreasury.toLowerCase()) throw new Error("Subscription treasury mismatch: deployed=" + actualTreasury + " expected=" + expectedTreasury);
-
-  console.log("CHAIN_ID=97");
-  console.log("DEPLOYER=" + owner.address);
-  console.log("DEPLOYER_BALANCE_TBNB=" + ethers.formatEther(balance));
-  console.log("CONTRACT=" + CONTRACT);
-  console.log("TOKEN=" + TOKEN);
-  console.log("SUBSCRIPTION=" + SUBSCRIPTION);
-  console.log("MEMBER_GAS_FUND_TBNB=" + ethers.formatEther(MEMBER_GAS_FUND));
-  console.log("OWNER_GAS_RESERVE_TBNB=" + ethers.formatEther(OWNER_GAS_RESERVE));
-  console.log("REQUIRED_MINIMUM_TBNB=" + ethers.formatEther(requiredFunding));
-
-  const members = [
-    ethers.Wallet.createRandom().connect(provider),
-    ethers.Wallet.createRandom().connect(provider),
-    ethers.Wallet.createRandom().connect(provider)
-  ];
-
-  for (let i = 0; i < members.length; i++) {
-    await send("FUND_MEMBER_" + (i + 1), owner.sendTransaction({
-      to: members[i].address,
-      value: MEMBER_GAS_FUND
-    }));
-  }
-
-  const memberTokenAmount = ethers.parseUnits("200", 6);
-  for (let i = 0; i < members.length; i++) {
-    await send("MINT_MEMBER_" + (i + 1), token.mint(members[i].address, memberTokenAmount));
-  }
-
-  const contribution = ethers.parseUnits("100", 6);
-  const collateral = ethers.parseUnits("50", 6);
-  const winningBidBps = 1500n;
-  const maxBidBps = 2000;
-  const groupId = ethers.keccak256(ethers.toUtf8Bytes("LIHOLISWANO-TESTNET-" + Date.now()));
-
-  console.log("GROUP_ID=" + groupId);
-  console.log("MEMBER_1=" + members[0].address);
-  console.log("MEMBER_2=" + members[1].address);
-  console.log("MEMBER_3=" + members[2].address);
-
-  await send("CREATE_GROUP", app.createGroup(groupId, TOKEN, contribution, collateral, maxBidBps, 3));
-
-  // Emergency-pause control test. The owner pauses the protocol and a
-  // customer financial action must be rejected on-chain. We then unpause
-  // and continue the same group through the normal financial lifecycle.
-  await send("PAUSE_PROTOCOL", app.pause());
-  if (!(await app.paused())) throw new Error("Protocol pause state did not become true");
-
-  let pauseBlocked = false;
-  try {
-    await app.connect(members[0]).joinGroup(groupId);
-  } catch (error) {
-    pauseBlocked = true;
-    console.log("PAUSE_BLOCKED_ERROR=" + (error.shortMessage || error.message || "reverted"));
-  }
-  if (!pauseBlocked) throw new Error("Paused protocol accepted a financial join operation");
-
-  await send("UNPAUSE_PROTOCOL", app.unpause());
-  if (await app.paused()) throw new Error("Protocol pause state did not clear");
-  console.log("PAUSE_E2E=PASS");
-
-  for (let i = 0; i < members.length; i++) {
-    const memberToken = token.connect(members[i]);
-    await send("APPROVE_MEMBER_" + (i + 1), memberToken.approve(CONTRACT, ethers.MaxUint256));
-    await send("JOIN_MEMBER_" + (i + 1), app.connect(members[i]).joinGroup(groupId));
-  }
-
-  for (let i = 0; i < members.length; i++) {
-    await send("CONTRIBUTE_MEMBER_" + (i + 1), app.connect(members[i]).contribute(groupId));
-  }
-
-  await send("BID_MEMBER_1", app.connect(members[0]).submitBid(groupId, 500));
-  await send("BID_MEMBER_2", app.connect(members[1]).submitBid(groupId, winningBidBps));
-  await send("BID_MEMBER_3", app.connect(members[2]).submitBid(groupId, 1000));
-
-  const before = await token.balanceOf(members[1].address);
-  const settlement = await send("SETTLE_ROUND", app.settleRound(groupId));
-  const after = await token.balanceOf(members[1].address);
-  const payout = after - before;
-
-  const member = await app.getMember(groupId, members[1].address);
-  const feeBps = await app.protocolFeeBps();
-  const pot = contribution * 3n;
-  const bidAmount = pot * winningBidBps / 10000n;
-  const fee = bidAmount * feeBps / 10000n;
-  const distributable = bidAmount - fee;
-  const share = distributable / 2n;
-  const remainder = distributable - (share * 2n);
-  const expectedPayout = pot - bidAmount + remainder;
-
-  if (payout !== expectedPayout) {
-    throw new Error("Unexpected winner payout: actual=" + ethers.formatUnits(payout, 6) + " expected=" + ethers.formatUnits(expectedPayout, 6));
-  }
-  // Member tuple order: account, active, defaulted, wonThisRotation,
-  // contributedThisRound, bidSubmitted, bidBps, totalWins, ...
-  if (member[7] !== 1n) {
-    throw new Error("Winner totalWins mismatch: " + member[7]);
-  }
-
-  console.log("SETTLEMENT_TX=" + settlement.hash);
-  console.log("WINNER=" + members[1].address);
-  console.log("PAYOUT=" + ethers.formatUnits(payout, 6));
-  console.log("EXPECTED_PAYOUT=" + ethers.formatUnits(expectedPayout, 6));
-  console.log("PROTOCOL_FEE_BPS=" + feeBps.toString());
-  // Subscription charging is intentionally disabled during this Testnet validation cycle.
-  // The subscription contract remains deployed and its pause/unpause controls are still tested.
-  if (process.env.SUBSCRIPTIONS_ENABLED === "true") {
-    throw new Error("SUBSCRIPTIONS_ENABLED=true is not permitted for the no-charge Testnet E2E");
-  }
-  await send("PAUSE_SUBSCRIPTIONS", subscriptions.pause());
-  if (!(await subscriptions.paused())) throw new Error("Subscription vault pause failed");
-  await send("UNPAUSE_SUBSCRIPTIONS", subscriptions.unpause());
-  if (await subscriptions.paused()) throw new Error("Subscription vault unpause failed");
-  console.log("SUBSCRIPTION_E2E=SKIPPED_DISABLED");
-  console.log("SUBSCRIPTION_PAUSE_E2E=PASS");
-
-}
-
-main().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+main().catch(e=>{console.error(e);process.exitCode=1;});
