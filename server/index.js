@@ -175,9 +175,7 @@ app.post("/api/auth/register",async(req,res)=>{
       "insert into users(email,password_hash,country,phone) values($1,$2,$3,$4) returning id,email,role,status,country,phone,kyc_status",
       [email,passwordHash,body.country,normalizedPhone]
     );
-    const user=r.rows[0];
-    await client.query("insert into subscription_accounts(user_id,currency,monthly_fiat_minor,active,next_due_date) values($1,$2,500,true,date_trunc('month',now())::date) on conflict(user_id) do nothing",[user.id,user.country==="BW"?"P":"E"]);
-    await client.query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country,subscription:"P/E5 monthly"})]);
+    const user=r.rows[0];    await client.query("insert into audit_log(actor_user_id,action,entity_type,entity_id,metadata) values($1,'user.registered','user',$1,$2)",[user.id,JSON.stringify({country:user.country,registrationMode:"automatic-email-registration"})]);
     let verification=null;
     if(process.env.EMAIL_VERIFICATION_REQUIRED==="true") verification=await issueEmailVerification(user.id,user.email,client);
     await client.query("COMMIT");
