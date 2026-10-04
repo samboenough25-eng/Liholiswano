@@ -61,19 +61,15 @@ contract Liholiswano {
  // The protocol first reserves the next eligible queue participant. Reservation is the
  // on-chain commitment that creates an obligation. If they do not fund before the payout
  // deadline, their collateral can cover exactly the missed contribution.
- function reserveNextFunder(uint256 id) external live {
+ function reserveFunder(uint256 id) external live {
   Tier storage t=_tier(id);_ensureRecipient(t,id);Payout storage po=payouts[id][payoutNumber[id]];if(po.paid)revert PayoutNotReady();if(block.timestamp>=po.deadline)revert PaymentClosed();
-  uint256 idx=t.funderCursor;
-  for(uint256 n=0;n<MAX_FUNDERS_SCAN;n++){
-   if(idx>=t.queueLength)idx=0;address a=queues[id][idx];Participant storage p=participants[id][a];
-   if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=t.recipient&&!po.fundedBy[a]&&!po.reservedBy[a]){
-    if(IERC20Minimal(t.token).balanceOf(a)>=t.contribution&&IERC20Minimal(t.token).allowance(a,address(this))>=t.contribution){
-     po.reservedBy[a]=true;po.reservedAt[a]=block.timestamp;t.funderCursor=_nextIndex(t,idx);emit FunderReserved(id,payoutNumber[id],a,po.funderCount);return;
-    }
-   }
-   idx=_nextIndex(t,idx);
-  }
-  revert NoEligibleRecipient();
+  Participant storage p=participants[id][msg.sender];
+  if(!p.joined)revert NotParticipant();
+  if(!p.eligible||p.collateral<t.collateralRequired||msg.sender==t.recipient)revert NotEligible();
+  if(po.fundedBy[msg.sender]||po.reservedBy[msg.sender])revert AlreadyReserved();
+  if(IERC20Minimal(t.token).balanceOf(msg.sender)<t.contribution||IERC20Minimal(t.token).allowance(msg.sender,address(this))<t.contribution)revert NotEligible();
+  po.reservedBy[msg.sender]=true;po.reservedAt[msg.sender]=block.timestamp;
+  emit FunderReserved(id,payoutNumber[id],msg.sender,po.funderCount);
  }
 
  function fundCurrent(uint256 id) external live nonReentrant {
@@ -120,7 +116,13 @@ contract Liholiswano {
  function isFunderEligible(uint256 id,address a) external view returns(bool){Tier storage t=_tier(id);Participant storage p=participants[id][a];Payout storage po=payouts[id][payoutNumber[id]];return p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=t.recipient&&!po.fundedBy[a]&&!po.reservedBy[a]&&IERC20Minimal(t.token).balanceOf(a)>=t.contribution&&IERC20Minimal(t.token).allowance(a,address(this))>=t.contribution;}
  function getTier(uint256 id) external view returns(Tier memory){return _tier(id);} function getQueue(uint256 id) external view returns(address[] memory){return queues[id];}
  function getParticipant(uint256 id,address a) external view returns(Participant memory){return participants[id][a];}
- function getCurrentPayout(uint256 id) external view returns(bool,uint256,address,uint256,uint256,uint256){Tier storage t=_tier(id);Payout storage p=payouts[id][payoutNumber[id]];return(p.exists,payoutNumber[id],p.recipient,p.funded,p.funderCount,p.deadline);}
+ function getCurrentPayout(uint256 id) external view returns(bool,uint256,address,uint256,uint256,uint256){
+  Tier storage t=_tier(id);Payout storage p=payouts[id][payoutNumber[id]];
+  return(p.exists,payoutNumber[id],p.recipient,p.funded,p.funderCount,p.deadline);
+ }
+ function getCurrentReservation(uint256 id,address a) external view returns(bool,uint256){
+  _tier(id); Payout storage p=payouts[id][payoutNumber[id]]; return(p.reservedBy[a],p.reservedAt[a]);
+ }
  function getTierIds() external view returns(uint256[] memory out){uint256 n=nextTierId-1;out=new uint256[](n);for(uint256 i=0;i<n;i++)out[i]=i+1;}
  function _tier(uint256 id) internal view returns(Tier storage t){t=tiers[id];if(!t.exists)revert TierNotFound();}
  function _transferFromExact(address token,address from,address to,uint256 amount) internal{uint256 b=IERC20Minimal(token).balanceOf(to);(bool ok,bytes memory d)=token.call(abi.encodeWithSelector(IERC20Minimal.transferFrom.selector,from,to,amount));if(!ok||(d.length>0&&!abi.decode(d,(bool))))revert TransferFailed();uint256 a=IERC20Minimal(token).balanceOf(to);if(a<b||a-b!=amount)revert TransferMismatch();}
