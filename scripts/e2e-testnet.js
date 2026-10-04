@@ -15,9 +15,9 @@ async function main(){
  for(let i=0;i<users.length;i++){await send("FUND_MEMBER_"+(i+1),owner.sendTransaction({to:users[i].address,value:gas}));await send("MINT_MEMBER_"+(i+1),token.mint(users[i].address,ethers.parseUnits("5000",6)));await send("APPROVE_MEMBER_"+(i+1),token.connect(users[i]).approve(CONTRACT,ethers.MaxUint256));}
  await send("PAUSE_PROTOCOL",app.pause());if(!(await app.paused()))throw new Error("Pause failed");await send("UNPAUSE_PROTOCOL",app.unpause());if(await app.paused())throw new Error("Unpause failed");
  for(let i=0;i<users.length;i++)await send("JOIN_MEMBER_"+(i+1),app.connect(users[i]).joinTier(id));
- const cp=await app.getCurrentPayout(id),recipient=cp[2];let funded=0;
+ const cp=await app.getCurrentPayout(id),recipient=cp[2],beforePayout=await token.balanceOf(recipient);let funded=0;
  for(const u of users){if(u.address.toLowerCase()===recipient.toLowerCase())continue;await send("RESERVE_"+(++funded),app.connect(u).reserveNextFunder(id));await send("FUND_"+funded,app.connect(u).fundCurrent(id));}
- const payoutBal=await token.balanceOf(recipient);if(payoutBal!==ethers.parseUnits("1000",6))throw new Error("Recipient payout mismatch: "+ethers.formatUnits(payoutBal,6));
+ const payoutBal=await token.balanceOf(recipient);if(payoutBal-beforePayout!==ethers.parseUnits("1000",6))throw new Error("Recipient payout mismatch: "+ethers.formatUnits(payoutBal,6));
  const rp=await app.getParticipant(id,recipient);if(rp[4]!==1n||rp[3]!==11n)throw new Error("Recipient was not requeued correctly");
  const treasury=await sub.treasury();if(treasury.toLowerCase()!==owner.address.toLowerCase())throw new Error("Subscription treasury mismatch");if((await sub.token()).toLowerCase()!==TOKEN.toLowerCase())throw new Error("Subscription token mismatch");
  await send("PAUSE_SUBSCRIPTIONS",sub.pause());if(!(await sub.paused()))throw new Error("Subscription pause failed");await send("UNPAUSE_SUBSCRIPTIONS",sub.unpause());if(await sub.paused())throw new Error("Subscription unpause failed");
