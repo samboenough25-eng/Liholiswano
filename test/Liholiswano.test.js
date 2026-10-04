@@ -57,7 +57,7 @@ describe("Liholiswano tier waiting-list protocol",function(){
   const p=await f.app.getParticipant(x.id,first.address);
   expect(p.collateral).eq(x.collateral-x.contribution);expect(p.eligible).eq(false);
   expect(await f.t.balanceOf(recipient)).eq(before+x.contribution);
-  await f.app.connect(first).approve(f.app.target,ethers.MaxUint256);
+  await f.t.connect(first).approve(f.app.target,ethers.MaxUint256);
   await f.app.connect(first).restoreCollateral(x.id);
   const restored=await f.app.getParticipant(x.id,first.address);
   expect(restored.collateral).eq(x.collateral);expect(restored.eligible).eq(true);
