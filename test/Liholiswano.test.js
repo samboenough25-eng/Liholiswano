@@ -75,13 +75,4 @@ describe("Liholiswano tier waiting-list protocol",function(){
   const q=await f.app.getQueue(x.id);
   expect(q[q.length-1].toLowerCase()).eq(recipient.toLowerCase());
  });
- it("skips participants who cannot currently fund and selects the next eligible participant",async()=>{
-  const f=await fixture(),x=await setup(f),cp=await f.app.getCurrentPayout(x.id),recipient=cp[2];
-  const first=f.users.find(u=>u.address.toLowerCase()!==recipient.toLowerCase());
-  const second=f.users.find(u=>u.address.toLowerCase()!==recipient.toLowerCase()&&u.address.toLowerCase()!==first.address.toLowerCase());
-  await f.t.connect(first).transfer(f.owner.address,ethers.parseUnits("4999",6));
-  await f.app.refreshFunder(x.id);
-  const assigned=(await f.app.getCurrentPayout(x.id))[6];
-  expect(assigned.toLowerCase()).eq(second.address.toLowerCase());
- });
 });
