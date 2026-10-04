@@ -42,13 +42,11 @@ $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"PO
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
 $("groups").onclick=refresh;$("activity").onclick=refresh;let currentKycCase=null;
 function renderGroups(groups){
-  if(!groups?.length){$("groupsOut").textContent="No available ROSCAs yet.";return;}
+  if(!groups?.length){$("groupsOut").textContent="No savings groups are available yet.";return;}
   $("groupsOut").innerHTML=groups.map(g=>{
     const id=String(g.onchain_group_id||"");
-    const safe=id.replace(/"/g,"&quot;");
-    return "<div style=\"padding:10px 0;border-bottom:1px solid #dbe5df\"><strong>"+String(g.name||"Unnamed group")+"</strong> — "+String(g.country||"")+" — "+String(g.member_count??0)+" members<br><small>"+safe+"</small><br><button type=\"button\" data-group=\""+safe+"\">Use this group</button></div>";
+    return "<div class='group-item'><strong>"+String(g.name||"Savings group")+"</strong><div class='muted'>"+String(g.country||"")+" · "+String(g.member_count??0)+" members</div><code>"+id+"</code><br><a href="./dapp.html" style="display:inline-block;margin-top:8px;color:#087f5b;font-weight:800">Open savings dApp →</a></div>";
   }).join("");
-  $("groupsOut").querySelectorAll("button[data-group]").forEach(b=>b.onclick=()=>{$("actionGroup").value=b.dataset.group;window.scrollTo({top:$("actionGroup").getBoundingClientRect().top+window.scrollY-80,behavior:"smooth"});});
 }
 async function loadStageAKyc(){
   const d=await api("/api/kyc/stage-a");
@@ -113,35 +111,6 @@ $("submitKyc").onclick=async()=>{
   }catch(e){$("kycAction").textContent=e.message}
 };
 $("verifyWallet").onclick=async()=>{try{if(!token)throw Error("Sign in first.");if(!window.ethereum)throw Error("No EVM wallet detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");const provider=new ethers.BrowserProvider(window.ethereum);const signer=await provider.getSigner();const address=await signer.getAddress();const network=await provider.getNetwork();if(network.chainId!==97n)throw Error("Switch the wallet to BNB Smart Chain Testnet.");const challenge=await api("/api/wallets/challenge",{method:"POST",body:JSON.stringify({address,chainId:97})});const signature=await signer.signMessage(challenge.message);const linked=await api("/api/wallets",{method:"POST",body:JSON.stringify({address,chainId:97,message:challenge.message,signature,primary:true,label:"BNB Testnet wallet"})});$("walletVerify").textContent=JSON.stringify(linked,null,2);await refresh()}catch(e){$("walletVerify").textContent=e.message}};
-let provider=null,signer=null,address=null;
-const FIN_ABI=["function joinGroup(bytes32)","function contribute(bytes32)","function submitBid(bytes32,uint256)"];
-const TOKEN_ABI=["function approve(address,uint256) returns(bool)","function allowance(address,address) view returns(uint256)","function decimals() view returns(uint8)"];
-function protocol(){if(!signer)throw Error("Connect an EVM wallet first.");return new ethers.Contract(C.contractAddress,FIN_ABI,signer)}
-function tokenContract(){if(!signer)throw Error("Connect an EVM wallet first.");return new ethers.Contract(C.tokenAddress,TOKEN_ABI,signer)}
-async function connect(){if(!window.ethereum)throw Error("No EVM wallet provider detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");provider=new ethers.BrowserProvider(window.ethereum);signer=await provider.getSigner();address=await signer.getAddress();await ensureChain()}
-async function ensureChain(){if(!provider)throw Error("Connect your wallet first.");const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId))throw Error("Switch the wallet to BNB Smart Chain Testnet.")}
-async function prepareAndSign(operation){
-  if(!token)throw Error("Sign in first.");
-  if(!signer)await connect();
-  await ensureChain();
-  const gid=$("actionGroup").value.trim();
-  if(!/^0x[a-fA-F0-9]{64}$/.test(gid))throw Error("Enter the 32-byte on-chain group ID.");
-  const key=operation+"-"+gid+"-"+Date.now()+"-"+Math.random().toString(16).slice(2);
-  const d=await api("/api/transactions/prepare",{method:"POST",headers:{"Idempotency-Key":key},body:JSON.stringify({operation,onchainGroupId:gid,idempotencyKey:key})});
-  const p=protocol();
-  let tx;
-  if(operation==="join"){const g=await (new ethers.Contract(C.contractAddress,["function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],provider)).getGroup(gid);const t=new ethers.Contract(g[3],["function approve(address,uint256) returns(bool)","function allowance(address,address) view returns(uint256)"],signer);const allowance=await t.allowance(address,C.contractAddress);if(allowance<g[5]){ $("financialStatus").textContent="Approve collateral in your wallet…";const aTx=await t.approve(C.contractAddress,g[5]);await aTx.wait();}tx=await p.joinGroup(gid);}
-  else if(operation==="contribute"){const w=await api("/api/wallets");const wallet=w.wallets.find(x=>x.is_primary&&x.verified_at);if(!wallet)throw Error("Verify a primary wallet first.");const g=await (new ethers.Contract(C.contractAddress,["function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)"],provider)).getGroup(gid);const t=tokenContract();const allowance=await t.allowance(address,C.contractAddress);if(allowance<g[4]){const aTx=await t.approve(C.contractAddress,g[4]);$("financialStatus").textContent="Approve contribution in your wallet…";await aTx.wait();}tx=await p.contribute(gid);}
-  else {const bid=Number($("bidBps").value);if(!Number.isFinite(bid)||bid<0)throw Error("Enter a valid bid percentage.");tx=await p.submitBid(gid,Math.round(bid*100));}
-  $("financialStatus").textContent="Transaction submitted: "+tx.hash+"\\nWaiting for confirmation…";
-  const receipt=await tx.wait();
-  const recorded=await api("/api/transactions/record",{method:"POST",body:JSON.stringify({requestId:d.request.id,txHash:receipt.hash})});
-  $("financialStatus").textContent="Transaction confirmed.\\n"+JSON.stringify(recorded.request,null,2);
-  await refresh();
-}
-$("joinOnchain").onclick=async()=>{try{await prepareAndSign("join")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
-$("contributeOnchain").onclick=async()=>{try{await prepareAndSign("contribute")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
-$("bidOnchain").onclick=async()=>{try{await prepareAndSign("bid")}catch(e){$("financialStatus").textContent=e?.shortMessage||e?.message||String(e)}};
 $("ticket").onclick=async()=>{try{await api("/api/support/tickets",{method:"POST",body:JSON.stringify({subject:$("subject").value,description:$("description").value})});$("subject").value="";$("description").value="";$("status").textContent="Support ticket created."}catch(e){$("status").textContent=e.message}};
 refresh();
 </script></main></body></html>
