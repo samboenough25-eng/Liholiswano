@@ -1,151 +1,33 @@
-<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="Liholiswano non-custodial customer savings-group dApp on BNB Smart Chain.">
-<title>Liholiswano — Customer dApp</title>
-<style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17211b;background:#f6f8f7;--ink:#17211b;--green:#07583f;--green2:#0b8a62;--mint:#eaf6f0;--line:#dfe8e3;--muted:#6a7770;--danger:#a52a2a;--warn:#7a4c00;--shadow:0 8px 30px rgba(23,33,27,.06)}
-*{box-sizing:border-box}body{margin:0}.wrap{max-width:1240px;margin:auto;padding:0 22px}header{background:#fff;color:var(--ink);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}.nav{min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:18px}.brand{display:flex;align-items:center;gap:11px}.logo{width:38px;height:38px;border-radius:12px;background:var(--green);display:grid;place-items:center;color:#fff;font-weight:900}.brand h1{margin:0;font-size:18px;letter-spacing:-.3px}.sub{font-size:12px;color:var(--muted);margin-top:2px}.navlinks{display:flex;gap:8px;align-items:center}.navlinks a{color:var(--ink);text-decoration:none;font-size:13px;padding:9px 11px;border-radius:9px}.navlinks a:hover{background:var(--mint)}.pill{border:1px solid #bcd9cc;background:var(--mint);color:#07583f;border-radius:999px;padding:7px 11px;font-size:11px;font-weight:800}.hero{padding:28px 0 10px}.hero h2{font-size:30px;letter-spacing:-1px;margin:0 0 7px}.hero p{margin:0;color:var(--muted);max-width:700px}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin:14px 0;box-shadow:var(--shadow)}h2{margin:0 0 7px;font-size:18px}h3{margin:0 0 6px;font-size:14px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.stat{background:#fbfcfb;border:1px solid var(--line);border-radius:12px;padding:14px}.stat b{display:block;font-size:20px;word-break:break-word}.stat span,.muted{font-size:12px;color:var(--muted)}button{padding:11px 15px;border:0;border-radius:10px;background:var(--green2);color:#fff;font-weight:800;cursor:pointer;margin:4px 4px 4px 0;transition:.15s}button:hover{filter:brightness(.96);transform:translateY(-1px)}button.alt{background:#fff;color:var(--ink);border:1px solid #cbd9d2}button.danger{background:#fff1f0;color:var(--danger);border:1px solid #efc8c5}button:disabled{opacity:.45;cursor:not-allowed;transform:none}input,select{width:100%;padding:11px 12px;border:1px solid #ccd9d2;border-radius:10px;background:#fff;margin:5px 0 11px;font:inherit;color:var(--ink)}label{font-size:12px;font-weight:750;color:#42534b}.status{padding:13px;border-radius:11px;background:#f0f7f3;white-space:pre-wrap;word-break:break-word;border:1px solid #d9e9e1}.status.err{background:#fff2f1;color:var(--danger);border-color:#f0cfcc}.status.warn{background:#fff8e9;color:var(--warn)}.mono{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all}.hidden{display:none!important}.group{border:1px solid var(--line);border-radius:13px;padding:15px;margin:10px 0;background:#fff}.group:hover{border-color:#b9d6c9}.row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}.tag{display:inline-block;border-radius:999px;padding:5px 9px;background:var(--mint);color:#07583f;font-size:11px;font-weight:800}.progress{height:7px;background:#e7eee9;border-radius:99px;overflow:hidden;margin:9px 0}.progress>i{display:block;height:100%;background:var(--green2);width:0}.tx{border-top:1px solid var(--line);padding:11px 0;font-size:12px}.tx a{color:var(--green2);font-weight:800}.notice{border-left:4px solid var(--green2);padding:12px 14px;background:var(--mint);border-radius:6px;font-size:13px}.small{font-size:11px}footer{padding:28px 0 45px;color:var(--muted);font-size:12px;text-align:center}@media(max-width:700px){.wrap{padding:0 14px}.navlinks{display:none}.hero h2{font-size:25px}.card{padding:16px}.stats{grid-template-columns:1fr 1fr}}
-</style>
-</head>
-<body>
-<header><div class="wrap"><div class="nav"><div class="brand"><div class="logo">L</div><div><h1>Liholiswano</h1><div class="sub">Savings groups &amp; financial services</div></div></div><div class="navlinks"><a href="./dapp.html">Savings</a><a href="./dashboard.html">Account</a><a href="./owner.html">Admin</a><span id="envPill" class="pill">CHECKING NETWORK…</span></div></div></header>
-<main class="wrap"><section class="hero"><h2>Manage your savings group</h2><p>Connect your wallet, choose a group, and manage your participation securely. Your funds are controlled by the smart contract — Liholiswano does not hold your wallet keys.</p></section>
-<section class="card">
-  <div class="row"><div><h2>1. Connect your wallet</h2><div class="muted">Use Binance Web3 Wallet or another EVM-compatible wallet. Liholiswano never asks for a seed phrase or private key.</div></div><div><button id="connect">Connect wallet</button><button id="switch" class="alt">Switch to BNB Testnet</button></div></div>
-  <div id="wallet" class="status" style="margin-top:10px">Wallet not connected.</div>
-</section>
-
-<section class="grid">
-  <div class="card"><h2>Wallet balances</h2><div id="walletStats" class="stats">
-    <div class="stat"><b>—</b><span>tBNB for gas</span></div><div class="stat"><b>—</b><span>Test token</span></div>
-  </div></div>
-  <div class="card"><h2>Deployment health</h2><div id="deployment" class="status">Loading public configuration…</div></div>
-</section>
-
-<section class="card">
-  <div class="row"><div><h2>2. Choose a savings group</h2><div class="muted">Group state and financial rules are read from the smart contract. The blockchain contract is the financial authority.</div></div><button id="loadGroups" class="alt">Refresh groups</button><button id="refresh" class="hidden" aria-hidden="true" tabindex="-1">Refresh</button></div>
-  <div id="groups" class="status" style="margin-top:10px">Loading groups…</div>
-</section>
-
-<section class="card">
-  <h2>3. Selected group</h2>
-  <div id="selected" class="status">Select a group above.</div>
-  <div class="grid" style="margin-top:12px">
-    <div><label>Group ID</label><input id="gid" readonly placeholder="Select a group"></div>
-    <div><label>Your membership</label><div id="membership" class="status">Not selected</div></div>
-  </div>
-  <div id="groupProgress" class="hidden" style="margin-top:10px"><div class="row"><span class="muted">Round contribution progress</span><span id="progressText" class="muted"></span></div><div class="progress"><i id="progressBar"></i></div></div>
-</section>
-
-<section class="card">
-  <h2>4. Join and fund</h2>
-  <div class="muted">Joining requires the group's collateral. Contributions require the group's contribution amount. Approvals are separate so you can see exactly what the wallet authorizes.</div>
-  <div class="grid" style="margin-top:10px">
-    <div><h3>Collateral</h3><div id="collateralInfo" class="status">Select a group.</div><button id="approveCollateral" class="alt">Approve collateral</button></div>
-    <div><h3>Contribution</h3><div id="contributionInfo" class="status">Select a group.</div><button id="approveContribution" class="alt">Approve contribution</button></div>
-  </div>
-  <button id="join">Join group</button><button id="contribute">Contribute this round</button>
-</section>
-
-<section class="card">
-  <h2>5. Bid and settlement</h2>
-  <div class="grid">
-    <div><label for="bid">Bid percentage (0–maximum shown above)</label><input id="bid" type="number" min="0" max="50" step="0.01" value="0"><div id="bidInfo" class="muted">Select a group to see the bid limit.</div><button id="bidBtn">Submit bid</button></div>
-    <div><h3>Settlement</h3><div class="notice">Settlement is enforced by the smart contract. A wallet transaction only triggers the contract; it cannot choose the winner or rewrite the payout.</div><button id="settle" class="alt">Settle round</button></div>
-  </div>
-  <div id="action" class="status" style="margin-top:10px">No transaction started.</div>
-</section>
-
-<section class="card">
-  <h2>Transaction history on this device</h2>
-  <div class="muted">Recent transaction hashes are stored only in this browser. They are not used as the financial ledger.</div>
-  <div id="history" style="margin-top:8px">No local transactions yet.</div>
-  <button id="clearHistory" class="danger">Clear local history</button>
-</section>
-
-<section class="grid">
-  <div class="card"><h2>Account & compliance</h2><p class="muted">Account services, KYC/compliance and support remain separate from wallet signing. For production, restricted financial operations must be allowed only after the configured compliance/KYC controls approve the customer. A wallet address is not proof of identity.</p><a href="./dashboard.html">Open account & services dashboard →</a></div>
-  <div class="card"><h2>Safety</h2><div id="safety" class="status"></div></div>
-</section>
-<footer>Testnet environment · Never share your recovery phrase or private key.</footer></main>
-
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script>
-<script src="./config.js"></script>
-<script>
-(()=> {
-"use strict";
-const E=window.ethers,C=window.LIHOLISWANO_CONFIG,$=id=>document.getElementById(id);
-let provider=null,signer=null,address=null,protocol=null,token=null,tokenDecimals=Number(C.tokenDecimals||6),tokenSymbol=C.tokenSymbol||"TOKEN",groups=[];
-
-const ABI=[
-"function joinGroup(bytes32)",
-"function contribute(bytes32)",
-"function submitBid(bytes32,uint256)",
-"function settleRound(bytes32)",
-"function getGroup(bytes32) view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
-"function getMembers(bytes32) view returns(tuple(address account,bool active,bool defaulted,bool wonThisRotation,bool contributedThisRound,bool bidSubmitted,uint256 bidBps,uint32 totalWins,uint256 totalContributed,uint256 totalReceived)[])",
-"function getGroupIds() view returns(bytes32[])"
-];
-const TOKEN=["function approve(address,uint256) returns(bool)","function balanceOf(address) view returns(uint256)","function allowance(address,address) view returns(uint256)","function decimals() view returns(uint8)","function symbol() view returns(string)"];
-
-function escapeHtml(v){return String(v??"").replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));}
-function safeTxHash(v){const h=String(v||"");return /^0x[0-9a-fA-F]{64}$/.test(h)?h:"";}
-function setStatus(id,text,kind){const el=$(id);el.className="status"+(kind==="err"?" err":kind==="warn"?" warn":"");el.textContent=text}
-function action(text,ok=true){setStatus("action",text,ok?"":"err")}
-function errorText(e){return e?.shortMessage||e?.reason||e?.info?.error?.message||e?.message||String(e)}
-function fail(e){action(errorText(e),false)}
-function explorerTx(hash){return C.explorer+"/tx/"+hash}
-function short(a){return a?String(a).slice(0,6)+"…"+String(a).slice(-4):"—"}
-function fmt(v){return E.formatUnits(v,tokenDecimals)}
-function recordTx(label,hash){const key="liholiswano:dapp:tx:v1";let h=[];try{h=JSON.parse(localStorage.getItem(key)||"[]")}catch{};h.unshift({label,hash,time:new Date().toISOString()});localStorage.setItem(key,JSON.stringify(h.slice(0,30)));renderHistory()}
-function renderHistory(){let h=[];try{h=JSON.parse(localStorage.getItem("liholiswano:dapp:tx:v1")||"[]")}catch{};h=Array.isArray(h)?h.filter(x=>x&&safeTxHash(x.hash)):[];if(!h.length){$("history").textContent="No local transactions yet.";return}$("history").innerHTML=h.map(x=>{const hash=safeTxHash(x.hash);return "<div class='tx'><strong>"+escapeHtml(x.label||"Transaction")+"</strong> · "+escapeHtml(new Date(x.time).toLocaleString())+"<br><span class='mono'>"+hash+"</span> · <a target='_blank' rel='noopener' href='"+C.explorer+"/tx/"+hash+"'>View on BscScan</a></div>"}).join("")}
-async function publicConfig(){try{const r=await fetch("https://liholiswano-bnb-api.onrender.com/api/public-config",{cache:"no-store"});if(r.ok)Object.assign(C,await r.json())}catch{}}
-async function ensureProvider(){if(!window.ethereum)throw Error("No EVM wallet provider detected. Open this page in Binance Web3 Wallet or another compatible EVM wallet.");if(!provider)provider=new E.BrowserProvider(window.ethereum);return provider}
-async function switchChain(){await ensureProvider();const hex="0x"+Number(C.chainId).toString(16);try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}catch(e){if(e.code!==4902)throw e;await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:C.chainName,nativeCurrency:{name:"tBNB",symbol:"tBNB",decimals:18},rpcUrls:[C.rpcUrl],blockExplorerUrls:[C.explorer]}]});await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}}
-async function connect(){await ensureProvider();await switchChain();signer=await provider.getSigner();address=await signer.getAddress();protocol=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,TOKEN,signer);await refresh()}
-async function readProvider(){return provider||new E.JsonRpcProvider(C.rpcUrl)}
-async function refresh(){try{
- if(!C.contractAddress||!C.tokenAddress)throw Error("Public deployment configuration is missing.");
- const p=await readProvider(),n=await p.getNetwork();if(n.chainId!==BigInt(C.chainId))throw Error("Configured RPC is not on BNB Testnet chain 97.");
- const [pc,tc]=await Promise.all([p.getCode(C.contractAddress),p.getCode(C.tokenAddress)]);if(pc==="0x"||tc==="0x")throw Error("Configured contracts are not deployed on BNB Testnet.");
- const tcRead=new E.Contract(C.tokenAddress,TOKEN,p);[tokenSymbol,tokenDecimals]=await Promise.all([tcRead.symbol(),tcRead.decimals()]);
- $("envPill").textContent="BNB TESTNET · CHAIN 97";
- $("deployment").textContent="BNB Smart Chain Testnet (chain 97)\nProtocol: "+C.contractAddress+"\nToken: "+tokenSymbol+" ("+tokenDecimals+" decimals)\nExplorer: "+C.explorer;
- $("safety").textContent="Testnet only. Use test tokens only.\nProtocol: "+C.contractAddress+"\nToken: "+C.tokenAddress+"\nNever enter a seed phrase or private key.";
- if(address){const [bnb,bal]=await Promise.all([p.getBalance(address),tcRead.balanceOf(address)]);$("wallet").textContent="Connected wallet\n"+address+"\nChain ID: "+n.chainId;$("walletStats").innerHTML="<div class='stat'><b>"+E.formatEther(bnb).slice(0,14)+"</b><span>tBNB for gas</span></div><div class='stat'><b>"+fmt(bal)+"</b><span>"+tokenSymbol+"</span></div>"}else $("wallet").textContent="Wallet not connected.";
- await loadGroups();
- }catch(e){$("envPill").textContent="CONFIGURATION ERROR";setStatus("deployment",errorText(e),"err");setStatus("safety","The dApp cannot verify its configured Testnet deployment. No financial action is enabled.","err")}}
-async function loadGroups(){try{const p=await readProvider(),c=new E.Contract(C.contractAddress,ABI,p),ids=await c.getGroupIds();groups=[];for(const id of ids){try{const g=await c.getGroup(id),members=await c.getMembers(id);let label=id;try{label=E.decodeBytes32String(id)}catch{};groups.push({id,label,g,members,mine:address?members.find(m=>m.account.toLowerCase()===address.toLowerCase()):null})}catch{}}
- if(!groups.length){$("groups").textContent="No readable savings groups are available.";return}
- $("groups").innerHTML=groups.map((x,i)=>{const active=x.members.filter(m=>m.active).length, pct=x.g[6]?Math.round(active*100/Number(x.g[6])):0;return "<div class='group' data-group='"+i+"'><div class='row'><strong>"+escapeHtml(x.label)+"</strong><span class='tag'>"+(x.g[1]?"LOCKED":"OPEN")+"</span></div><div class='muted' style='margin:5px 0'>Members "+active+" / "+x.g[6]+" · Contribution "+fmt(x.g[4])+" "+escapeHtml(tokenSymbol)+" · Collateral "+fmt(x.g[5])+" "+escapeHtml(tokenSymbol)+" · Round "+x.g[8]+" · Rotation "+x.g[9]+"</div><div class='progress'><i style='width:"+pct+"%'></i></div><div class='mono'>"+escapeHtml(x.id)+"</div><button data-use='"+i+"'>Use this group</button></div>"}).join("");
- $("groups").querySelectorAll("[data-use]").forEach(b=>b.onclick=()=>selectGroup(groups[Number(b.dataset.use)]));
- }catch(e){setStatus("groups",errorText(e),"err")}}
-function selectGroup(x){if(!x)return;$("gid").value=x.id;$("selected").textContent="Group: "+x.label+"\nStatus: "+(x.g[1]?"LOCKED":"OPEN")+"\nMembers: "+x.members.filter(m=>m.active).length+" / "+x.g[6]+"\nRound: "+x.g[8]+" · Rotation: "+x.g[9]+"\nContribution: "+fmt(x.g[4])+" "+tokenSymbol+"\nCollateral: "+fmt(x.g[5])+" "+tokenSymbol+"\nMaximum bid: "+(Number(x.g[7])/100).toFixed(2)+"%\nRound deadline: "+(Number(x.g[12])?new Date(Number(x.g[12])*1000).toLocaleString():"not started");
- $("membership").textContent=x.mine?(x.mine.active?(x.mine.defaulted?"ACTIVE · DEFAULTED":"ACTIVE"):"INACTIVE"):"NOT JOINED";
- $("collateralInfo").textContent=fmt(x.g[5])+" "+tokenSymbol+" collateral required.";
- $("contributionInfo").textContent=fmt(x.g[4])+" "+tokenSymbol+" per round.";
- $("bidInfo").textContent="Maximum bid: "+(Number(x.g[7])/100).toFixed(2)+"%. Higher bids are rejected by the contract.";
- $("groupProgress").classList.remove("hidden");const contributed=x.members.filter(m=>m.active&&m.contributedThisRound).length,active=x.members.filter(m=>m.active).length,pct=active?Math.round(contributed*100/active):0;$("progressText").textContent=contributed+" / "+active+" contributed";$("progressBar").style.width=pct+"%";
-}
-async function need(){if(!signer)await connect();const n=await provider.getNetwork();if(n.chainId!==BigInt(C.chainId)){await switchChain();signer=await provider.getSigner();protocol=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,TOKEN,signer)}}
-async function selected(){const gid=$("gid").value.trim();if(!gid)throw Error("Select a savings group first.");const x=groups.find(g=>g.id===gid);if(x)return x;const p=await readProvider(),g=await new E.Contract(C.contractAddress,ABI,p).getGroup(gid);return {id:gid,g}}
-async function sendAction(label,fn){try{await need();action("Confirm "+label+" in your wallet.");const tx=await fn();recordTx(label,tx.hash);action(label+" submitted: "+tx.hash+"\nWaiting for blockchain confirmation…");const receipt=await tx.wait();recordTx(label+" confirmed",receipt.hash);action(label+" confirmed.\n"+receipt.hash+"\n"+explorerTx(receipt.hash));await refresh()}catch(e){fail(e)}}
-async function approve(kind){try{await need();const x=await selected(),amount=kind==="collateral"?x.g[5]:x.g[4];if(amount<=0n)throw Error("The group amount is zero.");await sendAction(kind==="collateral"?"Collateral approval":"Contribution approval",()=>token.approve(C.contractAddress,amount))}catch(e){fail(e)}}
-$("connect").onclick=async()=>{try{await connect();action("Wallet connected. Select a group to continue.")}catch(e){fail(e)}};
-$("switch").onclick=async()=>{try{await switchChain();await connect();action("Connected to BNB Smart Chain Testnet.")}catch(e){fail(e)}};
-$("refresh").onclick=refresh;$("loadGroups").onclick=loadGroups;
-$("approveCollateral").onclick=()=>approve("collateral");$("approveContribution").onclick=()=>approve("contribution");
-$("join").onclick=async()=>{try{await need();const x=await selected();if(x.mine?.active)throw Error("This wallet is already an active member of the selected group.");const allowance=await token.allowance(address,C.contractAddress);if(allowance<x.g[5]){action("Collateral approval required. Confirm the approval in your wallet.");const a=await token.approve(C.contractAddress,x.g[5]);recordTx("Collateral approval",a.hash);await a.wait()}await sendAction("Join group",()=>protocol.joinGroup(x.id))}catch(e){fail(e)}};
-$("contribute").onclick=async()=>{try{await need();const x=await selected();if(!x.mine?.active)throw Error("Join the group before contributing.");const allowance=await token.allowance(address,C.contractAddress);if(allowance<x.g[4]){action("Contribution approval required. Confirm the approval in your wallet.");const a=await token.approve(C.contractAddress,x.g[4]);recordTx("Contribution approval",a.hash);await a.wait()}await sendAction("Contribution",()=>protocol.contribute(x.id))}catch(e){fail(e)}};
-$("bidBtn").onclick=async()=>{try{await need();const x=await selected(),b=Number($("bid").value),max=Number(x.g[7])/100;if(!Number.isFinite(b)||b<0||b>max)throw Error("Enter a bid between 0% and "+max.toFixed(2)+"%.");await sendAction("Bid submission",()=>protocol.submitBid(x.id,BigInt(Math.round(b*100))))}catch(e){fail(e)}};
-$("settle").onclick=async()=>{try{await need();const x=await selected();if(!x.g[1])throw Error("The selected group is not locked.");await sendAction("Round settlement",()=>protocol.settleRound(x.id))}catch(e){fail(e)}};
-$("clearHistory").onclick=()=>{localStorage.removeItem("liholiswano:dapp:tx:v1");renderHistory()};
-window.ethereum?.on?.("accountsChanged",()=>location.reload());window.ethereum?.on?.("chainChanged",()=>location.reload());
-renderHistory();publicConfig().then(refresh);
-})();
-</script>
-</body>
-</html>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Liholiswano — Waiting List</title><style>
+:root{font-family:Inter,system-ui,sans-serif;color:#17211b;background:#f6f8f7;--g:#07583f;--g2:#0b8a62;--line:#dfe8e3;--muted:#6a7770;--mint:#eaf6f0;--red:#a52a2a}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1100px;margin:auto;padding:0 18px}header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}.nav{min-height:70px;display:flex;justify-content:space-between;align-items:center}.brand{font-weight:900;font-size:19px;color:var(--g)}nav a{color:#17211b;text-decoration:none;margin-left:14px;font-size:13px}.hero{padding:30px 0 15px}.hero h1{font-size:30px;margin:0 0 7px}.hero p{color:var(--muted);max-width:750px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:19px;margin:14px 0;box-shadow:0 8px 25px #17211b0a}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}.stat{padding:12px;background:#fbfcfb;border:1px solid var(--line);border-radius:11px}.stat b{display:block;font-size:20px}.stat span{font-size:11px;color:var(--muted)}button{padding:11px 14px;border:0;border-radius:9px;background:var(--g2);color:#fff;font-weight:800;cursor:pointer;margin:5px 5px 5px 0}button.alt{background:#fff;color:#17211b;border:1px solid #ccd9d2}button:disabled{opacity:.45;cursor:not-allowed}.status{padding:12px;border-radius:10px;background:#f0f7f3;border:1px solid #d9e9e1;white-space:pre-wrap;word-break:break-word}.err{background:#fff1f0;color:var(--red);border-color:#efcfcb}.tier{border:1px solid var(--line);border-radius:13px;padding:15px;margin:9px 0}.tag{display:inline-block;padding:5px 9px;border-radius:999px;background:var(--mint);color:var(--g);font-size:11px;font-weight:800}.mono{font:12px ui-monospace,monospace;word-break:break-all}.muted{font-size:12px;color:var(--muted)}footer{padding:30px 0;text-align:center;color:var(--muted);font-size:12px}@media(max-width:600px){.stats{grid-template-columns:1fr 1fr}.hero h1{font-size:25px}}
+</style></head><body><header><div class="wrap nav"><div class="brand">Liholiswano</div><nav><a href="./dapp.html">Waiting List</a><a href="./dashboard.html">Account</a><a href="./owner.html">Admin</a></nav></div></header><main class="wrap"><section class="hero"><h1>Join the Liholiswano waiting list</h1><p>There are no fixed groups. Each tier has one large queue. When you reach the front, 10 eligible participants fund your payout. After you receive it, you return to the back of the queue.</p></section>
+<section class="card"><div class="stats"><div class="stat"><b id="chain">—</b><span>Network</span></div><div class="stat"><b id="token">—</b><span>Test token</span></div><div class="stat"><b id="wallet">Not connected</b><span>Wallet</span></div></div><button id="connect">Connect wallet</button><button id="switch" class="alt">Switch to BNB Testnet</button><div id="status" class="status">Connect a wallet to begin.</div></section>
+<section class="card"><h2>Available tiers</h2><div class="muted">The tier amount is the amount the recipient receives. Ten funders each contribute one tenth.</div><div id="tiers" style="margin-top:10px">Loading tiers…</div></section>
+<section class="grid"><div class="card"><h2>Current payout</h2><div id="current" class="status">Select a tier.</div><button id="refresh" class="alt">Refresh</button></div><div class="card"><h2>Your position</h2><div id="me" class="status">Connect your wallet and select a tier.</div></div></section>
+<section class="card"><h2>Actions</h2><div id="selected" class="muted">No tier selected.</div><button id="approve" class="alt">Approve entry + collateral</button><button id="join">Join this tier</button><button id="restore" class="alt">Restore collateral</button><button id="reserve">Reserve next funder slot</button><button id="fund">Pay contribution</button><button id="default" class="alt">Finalize expired reserved funder</button><div id="action" class="status" style="margin-top:10px">No transaction yet.</div></section>
+<section class="card"><h2>How the cycle works</h2><div class="status">1. Join a tier and lock the required collateral plus the P5 entry fee.
+2. Wait in the large tier queue.
+3. The contract selects eligible funders in queue order.
+4. Ten funders contribute the tier contribution.
+5. You receive the tier payout.
+6. You move to the back and can participate again.
+7. If a reserved funder misses the deadline, their collateral covers the missed contribution and they must restore collateral before becoming eligible again.</div></section></main><footer>BNB Smart Chain Testnet · mUSDT is test money only · Never share a recovery phrase or private key.</footer>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script src="./config.js"></script><script>
+(()=>{"use strict";const E=window.ethers,C=window.LIHOLISWANO_CONFIG,$=id=>document.getElementById(id);let provider,signer,address,app,token,selected=null,dec=Number(C.tokenDecimals||6),sym=C.tokenSymbol||"mUSDT";
+const ABI=["function ENTRY_FEE() view returns(uint256)","function getTierIds() view returns(uint256[])","function getTier(uint256) view returns(bool,bool,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,address)","function getCurrentPayout(uint256) view returns(bool,uint256,address,uint256,uint256,uint256)","function getParticipant(uint256,address) view returns(bool,bool,uint256,uint256,uint256,uint256,uint256)","function isFunderEligible(uint256,address) view returns(bool)","function joinTier(uint256)","function restoreCollateral(uint256)","function reserveNextFunder(uint256)","function fundCurrent(uint256)","function defaultFunder(uint256,address)"];
+const T=["function approve(address,uint256) returns(bool)","function allowance(address,address) view returns(uint256)","function balanceOf(address) view returns(uint256)"];
+const fmt=v=>E.formatUnits(v,dec), short=a=>a?a.slice(0,6)+"…"+a.slice(-4):"—", err=e=>e?.shortMessage||e?.reason||e?.message||String(e);
+async function init(){provider=new E.BrowserProvider(window.ethereum);await switchChain();signer=await provider.getSigner();address=await signer.getAddress();app=new E.Contract(C.contractAddress,ABI,signer);token=new E.Contract(C.tokenAddress,T,signer);$("wallet").textContent=short(address);await load();}
+async function switchChain(){const hex="0x"+Number(C.chainId).toString(16);try{await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]})}catch(e){if(e.code!==4902)throw e;await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:C.chainName,nativeCurrency:{name:"tBNB",symbol:"tBNB",decimals:18},rpcUrls:[C.rpcUrl],blockExplorerUrls:[C.explorer]}]})}}
+async function load(){try{const p=provider||new E.JsonRpcProvider(C.rpcUrl),r=new E.Contract(C.contractAddress,ABI,p),ids=await r.getTierIds();$("chain").textContent="BNB 97";$("token").textContent=sym;let html="";for(const id of ids){const t=await r.getTier(id);html+=`<div class="tier"><div><span class="tag">Tier ${id}</span></div><h3>${fmt(t[3])} ${sym} payout</h3><div class="muted">${fmt(t[4])} ${sym} per funder · ${fmt(t[5])} ${sym} collateral · 10 funders · ${t[6]} second payment window</div><button data-id="${id}">Select tier</button></div>`}$("tiers").innerHTML=html||"No tiers configured.";document.querySelectorAll("[data-id]").forEach(b=>b.onclick=()=>select(Number(b.dataset.id)));if(selected)await select(selected)}catch(e){setStatus("status",err(e),true)}}
+async function select(id){selected=id;$("selected").textContent="Selected Tier "+id;try{const r=new E.Contract(C.contractAddress,ABI,provider||new E.JsonRpcProvider(C.rpcUrl)),t=await r.getTier(id),cp=await r.getCurrentPayout(id);$("current").textContent=`Recipient: ${short(cp[2])}\nPayout: ${fmt(t[3])} ${sym}\nContribution: ${fmt(t[4])} ${sym} each\nFunders: ${cp[4]}/10\nDeadline: ${new Date(Number(cp[5])*1000).toLocaleString()}`;if(address){const p=await r.getParticipant(id,address);$("me").textContent=`Joined: ${p[0]}\nEligible: ${p[1]}\nCollateral: ${fmt(p[2])} ${sym}\nQueue position: ${p[3]}\nReceived payouts: ${p[4]}\nFunded: ${p[5]}\nDefaults: ${p[6]}`}}catch(e){setStatus("current",err(e),true)}}
+async function tx(fn,label){try{if(!app||!selected)throw Error("Connect wallet and select a tier first.");setStatus("action",label+" — waiting for wallet approval…");const z=await fn();setStatus("action",label+" submitted: "+z.hash);await z.wait();setStatus("action",label+" confirmed.");await load()}catch(e){setStatus("action",err(e),true)}}
+$("connect").onclick=async()=>{try{if(!window.ethereum)throw Error("No EVM wallet found.");await init()}catch(e){setStatus("status",err(e),true)}};$("switch").onclick=async()=>{try{await switchChain();setStatus("status","Switched to BNB Testnet.")}catch(e){setStatus("status",err(e),true)}};$("refresh").onclick=load;
+$("approve").onclick=()=>tx(async()=>{const t=await app.getTier(selected),fee=await app.ENTRY_FEE();return token.approve(C.contractAddress,fee+t[5])},"Approval");
+$("join").onclick=()=>tx(()=>app.joinTier(selected),"Join tier");
+$("restore").onclick=()=>tx(()=>app.restoreCollateral(selected),"Restore collateral");
+$("reserve").onclick=()=>tx(()=>app.reserveNextFunder(selected),"Reserve next funder");
+$("fund").onclick=()=>tx(()=>app.fundCurrent(selected),"Pay contribution");
+$("default").onclick=async()=>{const u=prompt("Enter the reserved funder's wallet address to finalize after the deadline.");if(!u||!E.isAddress(u))return;await tx(()=>app.defaultFunder(selected,u),"Finalize missed contribution")};
+function setStatus(id,msg,er){$(id).className="status"+(er?" err":"");$(id).textContent=msg}load();
+})()</script></body></html>
