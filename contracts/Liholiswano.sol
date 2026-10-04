@@ -224,20 +224,20 @@ contract Liholiswano {
  function _ensureFunder(Tier storage t,uint256 id) internal {
   Payout storage po=payouts[id][payoutNumber[id]];
   if(!po.exists||po.paid||po.funderCount>=FUNDERS_PER_PAYOUT||po.currentFunder!=address(0))return;
-  address candidate=nextParticipant[id][t.head]; // start at queue head
-  if(candidate==address(0))revert NoEligibleFunder();
+  address candidate=t.head;
   for(uint256 i=0;i<MAX_QUEUE_SCAN;i++){
-   if(candidate==address(0))candidate=t.head;
+   if(candidate==address(0))revert NoEligibleFunder();
    if(candidate!=po.recipient&&!po.fundedBy[candidate]){
     Participant storage p=participants[id][candidate];
-    if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&IERC20Minimal(t.token).balanceOf(candidate)>=t.contribution&&IERC20Minimal(t.token).allowance(candidate,address(this))>=t.contribution){
-     po.currentFunder=candidate;po.deadline=block.timestamp+t.paymentWindow;emit FunderAssigned(id,payoutNumber[id],candidate,po.deadline);return;
+    if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired){
+     po.currentFunder=candidate;po.deadline=block.timestamp+t.paymentWindow;
+     emit FunderAssigned(id,payoutNumber[id],candidate,po.deadline);return;
     }
    }
    candidate=nextParticipant[id][candidate];
    if(candidate==t.head)break;
   }
-  // No one is currently able to fund. A later balance/allowance change can call refreshFunder().
+  revert NoEligibleFunder();
  }
 
  function _append(Tier storage t,uint256 id,address a) internal {
@@ -254,7 +254,7 @@ contract Liholiswano {
 
  function isFunderEligible(uint256 id,address a) external view returns(bool){
   Tier storage t=_tier(id);Participant storage p=participants[id][a];Payout storage po=payouts[id][payoutNumber[id]];
-  return p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=po.recipient&&po.currentFunder==address(0)&&po.funderCount<FUNDERS_PER_PAYOUT&&IERC20Minimal(t.token).balanceOf(a)>=t.contribution&&IERC20Minimal(t.token).allowance(a,address(this))>=t.contribution;
+  return p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&a!=po.recipient&&po.currentFunder==address(0)&&po.funderCount<FUNDERS_PER_PAYOUT;
  }
 
  function getTier(uint256 id) external view returns(Tier memory){return _tier(id);}
