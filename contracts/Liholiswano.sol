@@ -18,7 +18,6 @@ contract Liholiswano {
  address public pendingOwner;
  address public treasury;
  bool public paused;
- uint256 public protocolFeeBps;
  uint256 private guard=1;
  uint256 public nextTierId=1;
  mapping(address=>bool) public approvedToken;
@@ -85,9 +84,9 @@ contract Liholiswano {
  error DeadlineNotReached();
  error InsufficientCollateral();
 
- constructor(address t,uint256 fee) {
-  if(t==address(0)||fee!=0) revert InvalidConfig();
-  owner=msg.sender; treasury=t; protocolFeeBps=fee;
+ constructor(address t) {
+  if(t==address(0)) revert InvalidConfig();
+  owner=msg.sender; treasury=t;
   emit OwnershipTransferred(address(0),msg.sender);
  }
  modifier onlyOwner(){if(msg.sender!=owner)revert Unauthorized();_; }
@@ -115,7 +114,6 @@ contract Liholiswano {
  function transferOwnership(address n) external onlyOwner {if(n==address(0))revert ZeroAddress();pendingOwner=n;emit OwnershipTransferStarted(owner,n);}
  function acceptOwnership() external {if(msg.sender!=pendingOwner)revert Unauthorized();address old=owner;owner=msg.sender;pendingOwner=address(0);emit OwnershipTransferred(old,owner);}
  function setTreasury(address n) external onlyOwner {if(n==address(0))revert ZeroAddress();emit TreasuryChanged(treasury,n);treasury=n;}
- function setProtocolFeeBps(uint256 n) external onlyOwner {if(n>500)revert InvalidConfig();emit ProtocolFeeChanged(protocolFeeBps,n);protocolFeeBps=n;}
  function setApprovedToken(address t,bool a) external onlyOwner {if(t==address(0)||t.code.length==0)revert InvalidToken();approvedToken[t]=a;emit TokenApprovalChanged(t,a);}
 
  function createTier(address token,uint256 payout,uint256 collateral,uint256 window) external onlyOwner live returns(uint256 id){
@@ -138,7 +136,7 @@ contract Liholiswano {
  function joinTier(uint256 id) external live nonReentrant {
   Tier storage t=_tier(id); if(!t.active)revert TierInactive();
   Participant storage p=participants[id][msg.sender]; if(p.joined)revert AlreadyJoined();
-  _transferFromExact(t.token,msg.sender,address(this),ENTRY_FEE+t.collateralRequired);
+  _transferFromExact(t.token,msg.sender,address(this),t.collateralRequired); _transferFromExact(t.token,msg.sender,treasury,ENTRY_FEE);
   p.joined=true;p.eligible=true;p.collateral=t.collateralRequired;
   _append(t,id,msg.sender);emit JoinedQueue(id,msg.sender,t.queueSize-1,p.collateral);
   _ensureRecipient(t,id);_ensureFunder(t,id);
