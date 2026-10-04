@@ -1,118 +1,12 @@
-<!doctype html>
-<html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Liholiswano — Account</title>
-<style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17211b;background:#f6f8f7;--green:#07583f;--green2:#0b8a62;--mint:#eaf6f0;--line:#dfe8e3;--muted:#6a7770;--shadow:0 8px 30px rgba(23,33,27,.06)}
-*{box-sizing:border-box}body{margin:0}.wrap{max-width:1240px;margin:auto;padding:0 22px}header{background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:10}.nav{min-height:72px;display:flex;justify-content:space-between;align-items:center;gap:16px}.brand{display:flex;align-items:center;gap:10px}.logo{width:38px;height:38px;border-radius:12px;background:var(--green);color:#fff;display:grid;place-items:center;font-weight:900}.brand h1{margin:0;font-size:18px}.muted{color:var(--muted);font-size:12px}.links{display:flex;gap:8px;align-items:center}.links a{color:#17211b;text-decoration:none;padding:9px 11px;border-radius:9px;font-size:13px}.links a:hover{background:var(--mint)}.badge{background:var(--mint);color:var(--green);border:1px solid #bfddce;padding:7px 10px;border-radius:99px;font-size:11px;font-weight:800}.hero{padding:28px 0 12px}.hero h2{font-size:30px;letter-spacing:-1px;margin:0 0 6px}.hero p{max-width:700px;margin:0;color:var(--muted)}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:19px;margin:14px 0;box-shadow:var(--shadow)}h2{font-size:18px;margin:0 0 6px}h3{font-size:14px;margin:0 0 6px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}.stat{border:1px solid var(--line);background:#fbfcfb;border-radius:12px;padding:13px}.stat b{display:block;font-size:20px}.stat span{font-size:11px;color:var(--muted)}input,select,textarea{width:100%;padding:11px 12px;border:1px solid #ccd9d2;border-radius:10px;background:#fff;font:inherit;margin:5px 0 10px}button{padding:10px 14px;border:0;border-radius:10px;background:var(--green2);color:#fff;font-weight:800;cursor:pointer;margin:3px}button.alt{background:#fff;color:#17211b;border:1px solid #ccd9d2}.status{padding:12px;border-radius:10px;background:#f0f7f3;border:1px solid #d9e9e1;white-space:pre-wrap;word-break:break-word}.status.err{background:#fff1f0;color:#9b211c}.section-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}.group-item{padding:13px 0;border-bottom:1px solid var(--line)}code{font-size:11px}.danger-note{background:#fff8e9;border:1px solid #efdfbd;border-radius:10px;padding:11px;font-size:12px;color:#684500}footer{padding:28px 0 45px;text-align:center;color:var(--muted);font-size:11px}@media(max-width:700px){.wrap{padding:0 14px}.links a{display:none}.hero h2{font-size:25px}.card{padding:15px}}
-</style></head>
-<body>
-<header><div class="wrap"><div class="nav"><div class="brand"><div class="logo">L</div><div><h1>Liholiswano</h1><div class="muted">Customer account</div></div></div><div class="links"><a href="./dapp.html">Savings</a><a href="./dashboard.html">Account</a><a href="./owner.html">Admin</a><span class="badge">TESTNET</span></div></div></div></header>
-<main class="wrap">
-<section class="hero"><h2>Your Liholiswano account</h2><p>Manage your profile, wallet connection, compliance status, savings groups and support from one place.</p></section>
-<section class="card"><div class="section-head"><div><h2>Sign in</h2><div class="muted">Use your Liholiswano account credentials. Wallet signing is separate from account authentication.</div></div><a href="./register.html">Create account</a></div><div class="grid"><input id="email" placeholder="Email address" autocomplete="email"><input id="password" type="password" placeholder="Password" autocomplete="current-password"></div><button id="login">Sign in</button><button id="logout" class="alt">Sign out</button><div id="status" class="status" style="margin-top:10px">Not signed in.</div></section>
-
-<section class="grid">
-<section class="card"><h2>Profile</h2><div id="profile" class="status">Sign in to view your profile.</div></section>
-<section class="card"><h2>Compliance</h2><div id="compliance" class="status">Sign in to view your compliance status.</div><div class="danger-note" style="margin-top:10px">Testnet notice: current pilot compliance is not production KYC/AML. Production access requires approved identity, biometric/liveness and AML controls.</div></section>
-</section>
-
-<section class="card"><div class="section-head"><div><h2>Wallet</h2><div class="muted">Verify control of your primary BNB wallet by signing a message. Never share your recovery phrase or private key.</div></div><button id="verifyWallet">Connect &amp; verify wallet</button></div><div id="walletVerify" class="status" style="margin-top:10px">Wallet not verified in this session.</div><div id="wallets" class="status" style="margin-top:10px">—</div></section>
-
-<section class="card"><div class="section-head"><div><h2>Savings groups</h2><div class="muted">Choose a group to open it in the secure customer savings interface.</div></div><button id="groups" class="alt">Refresh groups</button></div><div id="groupsOut" style="margin-top:8px">No groups loaded.</div></section>
-
-<section class="card"><h2>ROSCA activity</h2><div class="muted">Financial transactions are executed by your wallet and enforced by the smart contract.</div><div id="activityOut" class="status" style="margin-top:10px">No activity loaded.</div><button id="activity" class="alt">Refresh activity</button></section>
-
-<details class="card"><summary><strong>Legacy testnet verification tools</strong> <span class="muted">— not part of the normal customer journey</span></summary>
-<div style="margin-top:15px"><h3>WhatsApp pilot</h3><p class="muted">This is retained for compatibility with the existing pilot backend. It is not required for the core customer dApp.</p><input id="waPhone" placeholder="+267… or +268…"><button id="waLink">Send linking code</button><div id="waStatus" class="status">Not linked.</div></div>
-<div style="margin-top:15px"><h3>Stage-A compliance tooling</h3><div id="kyc" class="status">—</div><p class="muted">Development-only identity workflow. It is not regulated production KYC.</p><button id="startKyc" class="alt">Open development KYC tools</button>
-<div id="kycForm" style="display:none;margin-top:12px"><div class="grid"><input id="kycFirstName" placeholder="Legal first name"><input id="kycLastName" placeholder="Legal last name"><input id="kycDob" type="date"><select id="kycDocType"><option value="national_id">National ID</option><option value="passport">Passport</option></select><select id="kycDocCountry"><option value="BW">Botswana</option><option value="SZ">Eswatini</option></select><input id="kycLast4" maxlength="4" placeholder="Last 4 ID/passport digits"><input id="kycCity" maxlength="100" placeholder="Residential city"></div><label><input id="kycConsent" type="checkbox" style="width:auto"> I consent to this development KYC workflow.</label><input id="kycFile" type="file" accept=".jpg,.jpeg,.png,.pdf"><button id="saveKycIdentity">Save identity</button><button id="recordKycDocument">Record document metadata</button><button id="submitKyc">Submit for review</button><div id="kycAction" class="status">No action yet.</div></div></div>
-</details>
-
-<section class="card"><h2>Support</h2><div class="grid"><input id="subject" placeholder="What do you need help with?"><input id="description" placeholder="Describe the issue"></div><button id="ticket">Contact support</button></section>
-</main><footer>BNB Smart Chain Testnet · Liholiswano does not custody your wallet keys.</footer>
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.5/dist/ethers.umd.min.js"></script><script src="./config.js"></script><script>const C=window.LIHOLISWANO_CONFIG;window.LIHOLISWANO_API="https://liholiswano-bnb-api.onrender.com";
-const API=(window.LIHOLISWANO_API||location.origin), $=x=>document.getElementById(x);let token=localStorage.getItem("lhs_token")||"";
-async function syncPublicConfig(){try{const r=await fetch(API+"/api/public-config",{cache:"no-store"});if(!r.ok)throw Error();Object.assign(C,await r.json());}catch{console.warn("Current deployment configuration could not be loaded.");}}
-syncPublicConfig();
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Liholiswano — Account</title><style>
+body{margin:0;background:#f5f7f6;color:#17211b;font:15px system-ui,sans-serif}.wrap{max-width:900px;margin:auto;padding:25px 16px}.card{background:#fff;border:1px solid #dbe5df;border-radius:15px;padding:20px;margin:14px 0}button{padding:11px 14px;border:0;border-radius:9px;background:#087f5b;color:#fff;font-weight:800;cursor:pointer;margin:5px 5px 5px 0}.alt{background:#fff;color:#17211b;border:1px solid #ccd8d1}.status{padding:12px;background:#eef5f0;border-radius:9px;white-space:pre-wrap;word-break:break-word}.err{background:#fff0ef;color:#8f211c}.muted{font-size:12px;color:#66736b}a{color:#087f5b;font-weight:700}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}</style></head><body><main class="wrap"><div class="card"><h1>Liholiswano account</h1><p class="muted">Your account is separate from your non-custodial wallet. Registration does not require KYC in this testnet pilot.</p><button id="login">Sign in</button><button id="logout" class="alt">Sign out</button><div id="status" class="status">Not signed in.</div></div>
+<div class="grid"><div class="card"><h2>Waiting list</h2><p class="muted">Choose a tier, lock collateral and participate in the continuous queue.</p><a href="./dapp.html">Open waiting list →</a></div><div class="card"><h2>Wallet</h2><p class="muted">Connect your BNB wallet only when you are ready to make an on-chain transaction.</p><a href="./dapp.html">Open wallet &amp; savings →</a></div></div>
+<div class="card"><h2>Account details</h2><div id="profile" class="status">Sign in to load your account.</div></div>
+<div class="card"><h2>Compliance</h2><p class="muted">KYC/compliance is no longer part of registration. Any compliance controls required for restricted real-money operations can be applied separately when the production rules are finalized.</p></div></main>
+<script>
+const API="https://liholiswano-bnb-api.onrender.com",$=id=>document.getElementById(id);let token=localStorage.getItem("lhs_token")||"";
 async function api(path,opt={}){opt.headers=Object.assign({"Content-Type":"application/json"},opt.headers||{});if(token)opt.headers.Authorization="Bearer "+token;const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||"Request failed");return d}
-async function refresh(){if(!token)return;try{const [p,k,w,g,t,l,n,cs]=await Promise.all([api("/api/profile"),api("/api/kyc/stage-a"),api("/api/wallets"),api("/api/groups"),api("/api/transactions"),api("/api/ledger"),api("/api/notifications"),api("/api/compliance/status")]);$("profile").textContent=JSON.stringify(p.profile,null,2);$("kyc").textContent=JSON.stringify(k,null,2);$("wallets").textContent=JSON.stringify(w.wallets,null,2);renderGroups(g.groups);$("activityOut").textContent=JSON.stringify({transactions:t.transactions,ledger:l.entries,notifications:n.notifications},null,2);$("compliance").textContent=JSON.stringify(cs,null,2);$("status").textContent="Signed in."; }catch(e){$("status").textContent=e.message}}
-$("waLink").onclick=async()=>{try{if(!token)throw Error("Sign in first.");const d=await api("/api/whatsapp/link/request",{method:"POST",body:JSON.stringify({phone:$("waPhone").value})});$("waStatus").textContent="Linking code sent to "+d.phone+". Open WhatsApp and reply LINK followed by the 6-digit code.";await refresh()}catch(e){$("waStatus").textContent=e.message}};
-$("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value,password:$("password").value})});token=d.token;localStorage.setItem("lhs_token",token);await refresh()}catch(e){$("status").textContent=e.message}};
-$("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
-$("groups").onclick=refresh;$("activity").onclick=refresh;let currentKycCase=null;
-function escapeHtml(v){return String(v??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\x27/g,"&#39;");}
-function renderGroups(groups){
-  if(!groups?.length){$("groupsOut").textContent="No savings groups are available yet.";return;}
-  $("groupsOut").innerHTML=groups.map(g=>{
-    const id=String(g.onchain_group_id||"");
-    return "<div class='group-item'><strong>"+escapeHtml(g.name||"Savings group")+"</strong><div class='muted'>"+escapeHtml(g.country||"")+" · "+escapeHtml(g.member_count??0)+" members</div><code>"+escapeHtml(id)+"</code><br><a href='./dapp.html' style='display:inline-block;margin-top:8px;color:#087f5b;font-weight:800'>Open savings dApp →</a></div>";
-  }).join("");
-}
-async function loadStageAKyc(){
-  const d=await api("/api/kyc/stage-a");
-  currentKycCase=d.latestCase;
-  $("kyc").textContent=JSON.stringify({status:d.status,provider:d.provider,latestCase:d.latestCase,identity:d.identity,documents:d.documents},null,2);
-  if(d.identity){
-    $("kycFirstName").value=d.identity.legal_first_name||"";
-    $("kycLastName").value=d.identity.legal_last_name||"";
-    $("kycDob").value=d.identity.date_of_birth?String(d.identity.date_of_birth).slice(0,10):"";
-    $("kycDocType").value=d.identity.document_type||"national_id";
-    $("kycDocCountry").value=d.identity.document_country||"BW";
-    $("kycLast4").value=d.identity.document_last4||"";
-    $("kycCity").value=d.identity.residential_city||"";
-  }
-  return d;
-}
-$("startKyc").onclick=async()=>{
-  try{
-    if(!token)throw Error("Sign in first.");
-    let d=await loadStageAKyc();
-    if(!d.latestCase || ["approved","rejected"].includes(d.latestCase.status)){
-      d=await api("/api/kyc/stage-a/cases",{method:"POST",body:JSON.stringify({})});
-      currentKycCase=d.case;
-    }
-    $("kycForm").style.display="block";
-    await loadStageAKyc();
-  }catch(e){$("kycAction").textContent=e.message}
-};
-$("saveKycIdentity").onclick=async()=>{
-  try{
-    if(!currentKycCase)await loadStageAKyc();
-    if(!currentKycCase)throw Error("Start KYC first.");
-    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/identity",{method:"POST",body:JSON.stringify({
-      firstName:$("kycFirstName").value,lastName:$("kycLastName").value,dateOfBirth:$("kycDob").value,
-      documentType:$("kycDocType").value,documentCountry:$("kycDocCountry").value,
-      documentLast4:$("kycLast4").value||undefined,residentialCity:$("kycCity").value||undefined,
-      consent:$("kycConsent").checked
-    })});
-    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();
-  }catch(e){$("kycAction").textContent=e.message}
-};
-$("recordKycDocument").onclick=async()=>{
-  try{
-    if(!currentKycCase)throw Error("Start KYC first.");
-    const file=$("kycFile").files[0];if(!file)throw Error("Choose an identity document first.");
-    if(file.size>10*1024*1024)throw Error("Document must be 10 MB or smaller.");
-    const allowed=["image/jpeg","image/png","application/pdf"];if(!allowed.includes(file.type))throw Error("Use JPG, PNG or PDF.");
-    const buf=await file.arrayBuffer();const hash=await crypto.subtle.digest("SHA-256",buf);
-    const sha=Array.from(new Uint8Array(hash)).map(x=>x.toString(16).padStart(2,"0")).join("");
-    const type=$("kycDocType").value==="passport"?"passport":"identity_front";
-    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/documents/metadata",{method:"POST",body:JSON.stringify({
-      documentType:type,filename:file.name,contentType:file.type,byteSize:file.size,sha256:sha
-    })});
-    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();
-  }catch(e){$("kycAction").textContent=e.message}
-};
-$("submitKyc").onclick=async()=>{
-  try{
-    if(!currentKycCase)throw Error("Start KYC first.");
-    const d=await api("/api/kyc/stage-a/cases/"+currentKycCase.id+"/submit",{method:"POST",body:"{}"});
-    $("kycAction").textContent=JSON.stringify(d,null,2);await loadStageAKyc();await refresh();
-  }catch(e){$("kycAction").textContent=e.message}
-};
-$("verifyWallet").onclick=async()=>{try{if(!token)throw Error("Sign in first.");if(!window.ethereum)throw Error("No EVM wallet detected. Use Binance Web3 Wallet or another BNB-compatible wallet.");const provider=new ethers.BrowserProvider(window.ethereum);const signer=await provider.getSigner();const address=await signer.getAddress();const network=await provider.getNetwork();if(network.chainId!==97n)throw Error("Switch the wallet to BNB Smart Chain Testnet.");const challenge=await api("/api/wallets/challenge",{method:"POST",body:JSON.stringify({address,chainId:97})});const signature=await signer.signMessage(challenge.message);const linked=await api("/api/wallets",{method:"POST",body:JSON.stringify({address,chainId:97,message:challenge.message,signature,primary:true,label:"BNB Testnet wallet"})});$("walletVerify").textContent=JSON.stringify(linked,null,2);await refresh()}catch(e){$("walletVerify").textContent=e.message}};
-$("ticket").onclick=async()=>{try{await api("/api/support/tickets",{method:"POST",body:JSON.stringify({subject:$("subject").value,description:$("description").value})});$("subject").value="";$("description").value="";$("status").textContent="Support ticket created."}catch(e){$("status").textContent=e.message}};
-refresh();
-</script></main></body></html>
-</body></html>
+async function refresh(){if(!token)return;try{const d=await api("/api/me");$("profile").textContent=JSON.stringify(d,null,2);$("status").textContent="Signed in."}catch(e){$("status").className="status err";$("status").textContent=e.message}}
+$("login").onclick=async()=>{try{const email=prompt("Email");const password=prompt("Password");if(!email||!password)return;const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email,password})});token=d.token;localStorage.setItem("lhs_token",token);await refresh()}catch(e){$("status").className="status err";$("status").textContent=e.message}};
+$("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out.";$("profile").textContent="Sign in to load your account."};refresh();
+</script></body></html>
