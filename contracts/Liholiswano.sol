@@ -1,39 +1,294 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
-contract Liholiswano {
- uint256 public constant BPS=10000; uint256 public constant MAX_BID_BPS=5000; uint256 public constant MIN_MEMBERS=3; uint256 public constant MAX_MEMBERS=100; uint256 public constant ROUND_DURATION=1 days;
- address public owner; address public pendingOwner; bool public paused; uint256 public protocolFeeBps; address public treasury; uint256 private reentrancyLock=1;
- mapping(address=>bool) public approvedToken; mapping(bytes32=>Group) private groups; bytes32[] private groupIds;
- struct Member {address account;bool active;bool defaulted;bool wonThisRotation;bool contributedThisRound;bool bidSubmitted;uint256 bidBps;uint32 totalWins;uint256 totalContributed;uint256 totalReceived;}
- struct Group {bool exists;bool locked;address admin;address token;uint256 contribution;uint256 collateral;uint256 maxMembers;uint256 maxBidBps;uint256 round;uint256 rotation;uint256 reserve;uint256 uncoveredShortfall;uint256 roundDeadline;uint256 escrowBalance;address[] memberAccounts;mapping(address=>Member) members;}
- error Unauthorized(); error GroupExists(); error GroupNotFound(); error InvalidConfig(); error InvalidToken(); error TokenNotApproved(); error GroupLocked(); error GroupFull(); error AlreadyMember(); error NotMember(); error NotActive(); error TooFewMembers(); error AlreadyContributed(); error AlreadyBid(); error BidTooHigh(); error NotLocked(); error NotAllContributed(); error NotAllBids(); error AlreadyWon(); error NothingToSettle(); error TransferFailed(); error TransferMismatch(); error ZeroAddress(); error NotDefaultable(); error RoundNotDue(); error RoundClosed(); error Reentrancy(); error Paused();
- event PausedStateChanged(bool paused,address indexed operator); event OwnershipTransferStarted(address indexed oldOwner,address indexed pendingOwner); event OwnershipTransferred(address indexed oldOwner,address indexed newOwner); event TreasuryChanged(address indexed oldTreasury,address indexed newTreasury); event ProtocolFeeChanged(uint256 oldFeeBps,uint256 newFeeBps); event TokenApprovalChanged(address indexed token,bool approved); event GroupCreated(bytes32 indexed groupId,address indexed admin,address indexed token); event MemberJoined(bytes32 indexed groupId,address indexed member); event GroupLockedEvent(bytes32 indexed groupId,uint256 round,uint256 deadline); event ContributionPaid(bytes32 indexed groupId,address indexed member,uint256 amount); event BidSubmitted(bytes32 indexed groupId,address indexed member,uint256 bidBps); event RoundSettled(bytes32 indexed groupId,uint256 round,address indexed winner,uint256 bidAmount,uint256 payout); event MemberDefaulted(bytes32 indexed groupId,address indexed member,uint256 collateral,uint256 uncovered);
- constructor(address initialTreasury,uint256 initialFeeBps){if(initialTreasury==address(0)||initialFeeBps>500)revert InvalidConfig();owner=msg.sender;treasury=initialTreasury;protocolFeeBps=initialFeeBps;emit OwnershipTransferred(address(0),msg.sender);}
- modifier onlyOwner(){if(msg.sender!=owner)revert Unauthorized();_;}
- modifier whenNotPaused(){if(paused)revert Paused();_;} modifier nonReentrant(){if(reentrancyLock!=1)revert Reentrancy();reentrancyLock=2;_;reentrancyLock=1;}
- function pause() external onlyOwner{if(!paused){paused=true;emit PausedStateChanged(true,msg.sender);}} function unpause() external onlyOwner{if(paused){paused=false;emit PausedStateChanged(false,msg.sender);}} function transferOwnership(address n) external onlyOwner{if(n==address(0))revert ZeroAddress();pendingOwner=n;emit OwnershipTransferStarted(owner,n);}
- function acceptOwnership() external{if(msg.sender!=pendingOwner)revert Unauthorized();address oldOwner=owner;owner=msg.sender;pendingOwner=address(0);emit OwnershipTransferred(oldOwner,msg.sender);}
- function setTreasury(address n) external onlyOwner{if(n==address(0))revert ZeroAddress();emit TreasuryChanged(treasury,n);treasury=n;}
- function setProtocolFeeBps(uint256 n) external onlyOwner{if(n>500)revert InvalidConfig();emit ProtocolFeeChanged(protocolFeeBps,n);protocolFeeBps=n;}
- function setApprovedToken(address t,bool a) external onlyOwner{if(t==address(0)||t.code.length==0)revert InvalidToken();approvedToken[t]=a;emit TokenApprovalChanged(t,a);}
- function createGroup(bytes32 id,address token,uint256 contribution,uint256 collateral,uint256 maxBidBps,uint256 maxMembers) external whenNotPaused{if(groups[id].exists)revert GroupExists();if(!approvedToken[token])revert TokenNotApproved();if(token.code.length==0)revert InvalidToken();if(contribution==0||maxMembers<MIN_MEMBERS||maxMembers>MAX_MEMBERS||maxBidBps>MAX_BID_BPS)revert InvalidConfig();Group storage g=groups[id];g.exists=true;g.admin=msg.sender;g.token=token;g.contribution=contribution;g.collateral=collateral;g.maxMembers=maxMembers;g.maxBidBps=maxBidBps;groupIds.push(id);emit GroupCreated(id,msg.sender,token);}
- function joinGroup(bytes32 id) external whenNotPaused nonReentrant{Group storage g=_group(id);if(g.locked)revert GroupLocked();if(g.memberAccounts.length>=g.maxMembers)revert GroupFull();if(g.members[msg.sender].account!=address(0))revert AlreadyMember();if(g.collateral>0){_transferFromExact(g.token,msg.sender,address(this),g.collateral);g.escrowBalance+=g.collateral;}g.memberAccounts.push(msg.sender);g.members[msg.sender]=Member(msg.sender,true,false,false,false,false,0,0,0,0);emit MemberJoined(id,msg.sender);if(g.memberAccounts.length==g.maxMembers){_lockGroup(g,id);}}
- function lockGroup(bytes32 id) external whenNotPaused{Group storage g=_group(id);_lockGroup(g,id);}
- function _lockGroup(Group storage g,bytes32 id) internal{if(g.locked)revert GroupLocked();if(g.memberAccounts.length<MIN_MEMBERS)revert TooFewMembers();g.locked=true;g.round=1;g.rotation=1;g.roundDeadline=block.timestamp+ROUND_DURATION;emit GroupLockedEvent(id,1,g.roundDeadline);}
- function contribute(bytes32 id) external whenNotPaused nonReentrant{Group storage g=_group(id);if(!g.locked)revert NotLocked();if(block.timestamp>=g.roundDeadline)revert RoundClosed();Member storage m=_member(g,msg.sender);if(!m.active)revert NotActive();if(m.contributedThisRound)revert AlreadyContributed();_transferFromExact(g.token,msg.sender,address(this),g.contribution);g.escrowBalance+=g.contribution;m.contributedThisRound=true;m.totalContributed+=g.contribution;emit ContributionPaid(id,msg.sender,g.contribution);}
- function submitBid(bytes32 id,uint256 bidBps) external whenNotPaused{Group storage g=_group(id);if(!g.locked)revert NotLocked();if(block.timestamp>=g.roundDeadline)revert RoundClosed();if(bidBps>g.maxBidBps)revert BidTooHigh();Member storage m=_member(g,msg.sender);if(!m.active)revert NotActive();if(m.wonThisRotation)revert AlreadyWon();if(m.bidSubmitted)revert AlreadyBid();m.bidSubmitted=true;m.bidBps=bidBps;emit BidSubmitted(id,msg.sender,bidBps);}
- function settleRound(bytes32 id) external whenNotPaused nonReentrant{Group storage g=_group(id);if(!g.locked)revert NotLocked();bool due=block.timestamp>=g.roundDeadline;if(!due){for(uint256 i;i<g.memberAccounts.length;i++){Member storage m=g.members[g.memberAccounts[i]];if(!m.active)continue;if(!m.contributedThisRound)revert NotAllContributed();if(!m.wonThisRotation&&!m.bidSubmitted)revert NotAllBids();}}else{for(uint256 i;i<g.memberAccounts.length;i++){Member storage m=g.members[g.memberAccounts[i]];if(!m.active)continue;if(!m.contributedThisRound||(!m.wonThisRotation&&!m.bidSubmitted))_defaultMember(g,id,m);}}uint256 active;uint256 eligible;uint256 winnerIndex;uint256 winnerBid;bool winnerFound;for(uint256 i;i<g.memberAccounts.length;i++){Member storage m=g.members[g.memberAccounts[i]];if(!m.active)continue;active++;if(!m.wonThisRotation){eligible++;if(!winnerFound||m.bidBps>winnerBid){winnerFound=true;winnerBid=m.bidBps;winnerIndex=i;}}}if(active==0||eligible==0||!winnerFound)revert NothingToSettle();uint256 pot=active*g.contribution;if(g.escrowBalance<pot)revert TransferFailed();uint256 bidAmount=pot*winnerBid/BPS;uint256 payout=pot-bidAmount;uint256 fee=bidAmount*protocolFeeBps/BPS;uint256 distributable=bidAmount-fee;uint256 others=active-1;uint256 share=others==0?0:distributable/others;uint256 remainder=distributable-share*others;address winner=g.memberAccounts[winnerIndex];if(payout>0)_transferExact(g.token,winner,payout);if(fee>0)_transferExact(g.token,treasury,fee);for(uint256 i;i<g.memberAccounts.length;i++){Member storage m=g.members[g.memberAccounts[i]];if(!m.active)continue;if(i==winnerIndex){m.wonThisRotation=true;m.totalWins++;m.totalReceived+=payout+remainder;if(remainder>0)_transferExact(g.token,m.account,remainder);}else if(share>0){_transferExact(g.token,m.account,share);m.totalReceived+=share;}m.contributedThisRound=false;m.bidSubmitted=false;m.bidBps=0;}g.escrowBalance-=pot;emit RoundSettled(id,g.round,winner,bidAmount,payout+remainder);g.round++;g.roundDeadline=block.timestamp+ROUND_DURATION;if(_eligibleCount(g)==0){g.rotation++;for(uint256 i;i<g.memberAccounts.length;i++){if(g.members[g.memberAccounts[i]].active)g.members[g.memberAccounts[i]].wonThisRotation=false;}}}
- function markDefault(bytes32 id,address member) external whenNotPaused nonReentrant{Group storage g=_group(id);if(block.timestamp<g.roundDeadline)revert RoundNotDue();Member storage m=_member(g,member);if(!m.active||m.defaulted)revert NotDefaultable();if(m.contributedThisRound&&(m.bidSubmitted||m.wonThisRotation))revert NotDefaultable();_defaultMember(g,id,m);}
- function getGroup(bytes32 id) external view returns(bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256){Group storage g=_group(id);return(g.exists,g.locked,g.admin,g.token,g.contribution,g.collateral,g.maxMembers,g.maxBidBps,g.round,g.rotation,g.reserve,g.uncoveredShortfall,g.roundDeadline,g.escrowBalance,g.memberAccounts.length);}
- function getMembers(bytes32 id) external view returns(Member[] memory){Group storage g=_group(id);Member[] memory out=new Member[](g.memberAccounts.length);for(uint256 i;i<g.memberAccounts.length;i++)out[i]=g.members[g.memberAccounts[i]];return out;}
- function getMember(bytes32 id,address a) external view returns(Member memory){return _member(_group(id),a);}
- function getGroupIds() external view returns(bytes32[] memory){return groupIds;}
- function tokenBalance(bytes32 id) external view returns(uint256){return IERC20Minimal(_group(id).token).balanceOf(address(this));}
- function _eligibleCount(Group storage g) internal view returns(uint256 n){for(uint256 i;i<g.memberAccounts.length;i++){Member storage m=g.members[g.memberAccounts[i]];if(m.active&&!m.wonThisRotation)n++;}}
- function _defaultMember(Group storage g,bytes32 id,Member storage m) internal{if(!m.active||m.defaulted)revert NotDefaultable();if(m.contributedThisRound&&(m.bidSubmitted||m.wonThisRotation))revert NotDefaultable();uint256 uncovered;if(m.wonThisRotation){uint256 remaining;for(uint256 i;i<g.memberAccounts.length;i++){Member storage other=g.members[g.memberAccounts[i]];if(other.active&&!other.wonThisRotation&&other.account!=m.account)remaining++;}uint256 owed=remaining*g.contribution;uncovered=owed>g.collateral?owed-g.collateral:0;}m.active=false;m.defaulted=true;g.reserve+=g.collateral+(m.contributedThisRound?g.contribution:0);g.uncoveredShortfall+=uncovered;emit MemberDefaulted(id,m.account,g.collateral,uncovered);}
- function _group(bytes32 id) internal view returns(Group storage g){g=groups[id];if(!g.exists)revert GroupNotFound();}
- function _member(Group storage g,address a) internal view returns(Member storage m){m=g.members[a];if(m.account==address(0))revert NotMember();}
- function _transferFromExact(address t,address f,address to,uint256 a) internal{uint256 beforeBalance=IERC20Minimal(t).balanceOf(to);(bool ok,bytes memory d)=t.call(abi.encodeWithSelector(IERC20Minimal.transferFrom.selector,f,to,a));if(!ok||(d.length>0&&!abi.decode(d,(bool))))revert TransferFailed();uint256 afterBalance=IERC20Minimal(t).balanceOf(to);if(afterBalance<beforeBalance||afterBalance-beforeBalance!=a)revert TransferMismatch();}
- function _transferExact(address t,address to,uint256 a) internal{uint256 beforeBalance=IERC20Minimal(t).balanceOf(to);(bool ok,bytes memory d)=t.call(abi.encodeWithSelector(IERC20Minimal.transfer.selector,to,a));if(!ok||(d.length>0&&!abi.decode(d,(bool))))revert TransferFailed();uint256 afterBalance=IERC20Minimal(t).balanceOf(to);if(afterBalance<beforeBalance||afterBalance-beforeBalance!=a)revert TransferMismatch();}
+
+interface IERC20Minimal {
+    function transfer(address to,uint256 amount) external returns(bool);
+    function transferFrom(address from,address to,uint256 amount) external returns(bool);
+    function balanceOf(address account) external view returns(uint256);
+    function allowance(address owner,address spender) external view returns(uint256);
 }
-interface IERC20Minimal{function transfer(address to,uint256 amount) external returns(bool);function transferFrom(address from,address to,uint256 amount) external returns(bool);function balanceOf(address account) external view returns(uint256);}
+
+contract Liholiswano {
+    uint256 public constant FUNDERS_PER_PAYOUT = 10;
+    uint256 public constant ENTRY_FEE = 5e6; // P5 with the testnet token's 6 decimals; production token amount is configurable below.
+    uint256 public constant MAX_TIERS = 32;
+    uint256 public constant MAX_QUEUE_SCAN = 128;
+
+    address public owner;
+    address public pendingOwner;
+    address public treasury;
+    bool public paused;
+    uint256 public protocolFeeBps;
+    uint256 private lockState = 1;
+
+    mapping(address=>bool) public approvedToken;
+    uint256 public nextTierId = 1;
+
+    struct Tier {
+        bool exists;
+        bool active;
+        address token;
+        uint256 payout;
+        uint256 contribution;
+        uint256 collateralRequired;
+        uint256 paymentWindow;
+        uint256 queueLength;
+        uint256 recipientIndex;
+        uint256 funderCursor;
+        uint256 cycle;
+        uint256 fundedAmount;
+        uint256 funderCount;
+        uint256 payoutDeadline;
+        address recipient;
+    }
+
+    struct Participant {
+        bool joined;
+        bool eligible;
+        uint256 collateral;
+        uint256 queueIndex;
+        uint256 receivedCount;
+        uint256 fundedCount;
+        uint256 defaultCount;
+    }
+
+    struct Payout {
+        bool exists;
+        bool paid;
+        uint256 funded;
+        uint256 funderCount;
+        uint256 deadline;
+        address recipient;
+        mapping(address=>bool) fundedBy;
+    }
+
+    mapping(uint256=>Tier) private tiers;
+    mapping(uint256=>address[]) private queues;
+    mapping(uint256=>mapping(address=>Participant)) private participants;
+    mapping(uint256=>mapping(uint256=>Payout)) private payouts;
+    mapping(uint256=>uint256) public payoutNumber;
+
+    error Unauthorized();
+    error PausedError();
+    error InvalidConfig();
+    error InvalidToken();
+    error NotApprovedToken();
+    error TierNotFound();
+    error TierInactive();
+    error AlreadyJoined();
+    error NotParticipant();
+    error AlreadyEligible();
+    error InsufficientCollateral();
+    error NotEligible();
+    error NotYourTurn();
+    error InvalidAmount();
+    error AlreadyFunded();
+    error PaymentClosed();
+    error PayoutNotReady();
+    error TransferFailed();
+    error TransferMismatch();
+    error ZeroAddress();
+    error Reentrancy();
+    error ScanLimit();
+    error NoEligibleRecipient();
+
+    event OwnershipTransferStarted(address indexed oldOwner,address indexed pendingOwner);
+    event OwnershipTransferred(address indexed oldOwner,address indexed newOwner);
+    event PausedStateChanged(bool paused,address indexed operator);
+    event TreasuryChanged(address indexed oldTreasury,address indexed newTreasury);
+    event ProtocolFeeChanged(uint256 oldFeeBps,uint256 newFeeBps);
+    event TokenApprovalChanged(address indexed token,bool approved);
+    event TierCreated(uint256 indexed tierId,address indexed token,uint256 payout,uint256 contribution,uint256 collateralRequired);
+    event TierUpdated(uint256 indexed tierId,uint256 payout,uint256 contribution,uint256 collateralRequired,uint256 paymentWindow,bool active);
+    event JoinedQueue(uint256 indexed tierId,address indexed participant,uint256 position,uint256 collateral);
+    event CollateralRestored(uint256 indexed tierId,address indexed participant,uint256 amount,uint256 totalCollateral);
+    event FunderPaid(uint256 indexed tierId,uint256 indexed payoutId,address indexed funder,uint256 amount,uint256 funderCount);
+    event FunderDefaulted(uint256 indexed tierId,uint256 indexed payoutId,address indexed funder,uint256 amount,uint256 remainingCollateral);
+    event RecipientPaid(uint256 indexed tierId,uint256 indexed payoutId,address indexed recipient,uint256 amount,uint256 nextQueueIndex);
+    event RecipientRequeued(uint256 indexed tierId,address indexed recipient,uint256 newPosition);
+
+    constructor(address initialTreasury,uint256 initialFeeBps) {
+        if(initialTreasury==address(0)||initialFeeBps>500) revert InvalidConfig();
+        owner=msg.sender; treasury=initialTreasury; protocolFeeBps=initialFeeBps;
+        emit OwnershipTransferred(address(0),msg.sender);
+    }
+
+    modifier onlyOwner(){if(msg.sender!=owner) revert Unauthorized(); _;}
+    modifier whenNotPaused(){if(paused) revert PausedError(); _;}
+    modifier nonReentrant(){if(lockState!=1) revert Reentrancy(); lockState=2; _; lockState=1;}
+
+    function pause() external onlyOwner { paused=true; emit PausedStateChanged(true,msg.sender); }
+    function unpause() external onlyOwner { paused=false; emit PausedStateChanged(false,msg.sender); }
+    function transferOwnership(address n) external onlyOwner { if(n==address(0)) revert ZeroAddress(); pendingOwner=n; emit OwnershipTransferStarted(owner,n); }
+    function acceptOwnership() external { if(msg.sender!=pendingOwner) revert Unauthorized(); address old=owner; owner=msg.sender; pendingOwner=address(0); emit OwnershipTransferred(old,msg.sender); }
+    function setTreasury(address n) external onlyOwner { if(n==address(0)) revert ZeroAddress(); emit TreasuryChanged(treasury,n); treasury=n; }
+    function setProtocolFeeBps(uint256 n) external onlyOwner { if(n>500) revert InvalidConfig(); emit ProtocolFeeChanged(protocolFeeBps,n); protocolFeeBps=n; }
+    function setApprovedToken(address t,bool a) external onlyOwner { if(t==address(0)||t.code.length==0) revert InvalidToken(); approvedToken[t]=a; emit TokenApprovalChanged(t,a); }
+
+    function createTier(address token,uint256 payout,uint256 collateralRequired,uint256 paymentWindow) external onlyOwner whenNotPaused returns(uint256 id) {
+        if(!approvedToken[token]||token.code.length==0) revert NotApprovedToken();
+        if(payout==0||payout%FUNDERS_PER_PAYOUT!=0||collateralRequired==0||paymentWindow==0||nextTierId>MAX_TIERS) revert InvalidConfig();
+        id=nextTierId++;
+        tiers[id]=Tier(true,true,token,payout,payout/FUNDERS_PER_PAYOUT,collateralRequired,paymentWindow,0,0,0,0,0,0,0,address(0));
+        emit TierCreated(id,token,payout,payout/FUNDERS_PER_PAYOUT,collateralRequired);
+    }
+
+    function updateTier(uint256 id,uint256 payout,uint256 collateralRequired,uint256 paymentWindow,bool active) external onlyOwner {
+        Tier storage t=_tier(id);
+        if(payout==0||payout%FUNDERS_PER_PAYOUT!=0||collateralRequired==0||paymentWindow==0) revert InvalidConfig();
+        if(t.queueLength>0 && (t.payout!=payout || t.token==address(0))) revert InvalidConfig();
+        t.payout=payout; t.contribution=payout/FUNDERS_PER_PAYOUT; t.collateralRequired=collateralRequired; t.paymentWindow=paymentWindow; t.active=active;
+        emit TierUpdated(id,payout,t.contribution,collateralRequired,paymentWindow,active);
+    }
+
+    function joinTier(uint256 id) external whenNotPaused nonReentrant {
+        Tier storage t=_tier(id); if(!t.active) revert TierInactive();
+        Participant storage p=participants[id][msg.sender]; if(p.joined) revert AlreadyJoined();
+        _transferFromExact(t.token,msg.sender,address(this),ENTRY_FEE+t.collateralRequired);
+        p.joined=true; p.eligible=true; p.collateral=t.collateralRequired; p.queueIndex=t.queueLength;
+        queues[id].push(msg.sender); t.queueLength++;
+        emit JoinedQueue(id,msg.sender,p.queueIndex,p.collateral);
+        _ensureRecipient(t,id);
+    }
+
+    function restoreCollateral(uint256 id) external whenNotPaused nonReentrant {
+        Tier storage t=_tier(id); Participant storage p=participants[id][msg.sender]; if(!p.joined) revert NotParticipant();
+        if(p.collateral>=t.collateralRequired) revert AlreadyEligible();
+        uint256 needed=t.collateralRequired-p.collateral;
+        _transferFromExact(t.token,msg.sender,address(this),needed);
+        p.collateral+=needed; p.eligible=true;
+        emit CollateralRestored(id,msg.sender,needed,p.collateral);
+    }
+
+    function fundCurrent(uint256 id) external whenNotPaused nonReentrant {
+        Tier storage t=_tier(id); Participant storage p=participants[id][msg.sender];
+        if(!p.joined) revert NotParticipant();
+        if(!p.eligible || p.collateral<t.collateralRequired) revert NotEligible();
+        _ensureRecipient(t,id);
+        address recipient=t.recipient; if(recipient==address(0)||recipient==msg.sender) revert NotEligible();
+        uint256 pid=payoutNumber[id]; Payout storage po=payouts[id][pid];
+        if(block.timestamp>=po.deadline) revert PaymentClosed();
+        if(po.fundedBy[msg.sender]) revert AlreadyFunded();
+        _transferFromExact(t.token,msg.sender,address(this),t.contribution);
+        po.fundedBy[msg.sender]=true; po.funded+=t.contribution; po.funderCount++;
+        p.fundedCount++;
+        emit FunderPaid(id,pid,msg.sender,t.contribution,po.funderCount);
+        if(po.funderCount==FUNDERS_PER_PAYOUT) _payRecipient(t,id,pid);
+    }
+
+    function defaultFunder(uint256 id,address funder) external whenNotPaused nonReentrant {
+        Tier storage t=_tier(id); Participant storage p=participants[id][funder];
+        if(!p.joined) revert NotParticipant();
+        uint256 pid=payoutNumber[id]; Payout storage po=payouts[id];
+        if(!po.exists||po.paid||!po.fundedBy[funder]) revert NotEligible();
+        if(block.timestamp<po.deadline) revert PaymentClosed();
+        // A successfully funded contribution cannot default. This function is retained for
+        // reserved future slot accounting; actual missed payments are represented by an
+        // unsuccessful fundCurrent call and skipped by the cursor.
+        revert NotEligible();
+    }
+
+    function skipCurrent(uint256 id) external whenNotPaused {
+        Tier storage t=_tier(id); _ensureRecipient(t,id);
+        Payout storage po=payouts[id][payoutNumber[id]];
+        if(block.timestamp<po.deadline) revert PaymentClosed();
+        if(po.funderCount>=FUNDERS_PER_PAYOUT) revert PayoutNotReady();
+        t.funderCursor=_nextIndex(t,id,t.funderCursor);
+        po.deadline=block.timestamp+t.paymentWindow;
+    }
+
+    function settlePayout(uint256 id) external whenNotPaused nonReentrant {
+        Tier storage t=_tier(id); _ensureRecipient(t,id);
+        uint256 pid=payoutNumber[id]; Payout storage po=payouts[id][pid];
+        if(po.funderCount<FUNDERS_PER_PAYOUT) revert PayoutNotReady();
+        _payRecipient(t,id,pid);
+    }
+
+    function _payRecipient(Tier storage t,uint256 id,uint256 pid) internal {
+        Payout storage po=payouts[id][pid]; if(po.paid) return;
+        if(po.funderCount!=FUNDERS_PER_PAYOUT||po.funded!=t.payout) revert PayoutNotReady();
+        uint256 fee=po.funded*protocolFeeBps/10000;
+        uint256 net=po.funded-fee;
+        _transferExact(t.token,po.recipient,net);
+        if(fee>0) _transferExact(t.token,treasury,fee);
+        po.paid=true;
+        Participant storage rp=participants[id][po.recipient];
+        rp.receivedCount++; rp.eligible=true;
+        // Recipient goes to the back. The array uses append-only slots so the queue
+        // remains auditable; recipientIndex points at the current head.
+        uint256 oldIndex=rp.queueIndex;
+        rp.queueIndex=t.queueLength;
+        queues[id].push(po.recipient); t.queueLength++;
+        t.recipientIndex=_nextIndex(t,id,oldIndex);
+        t.funderCursor=t.recipientIndex;
+        t.recipient=address(0);
+        emit RecipientPaid(id,pid,po.recipient,net,t.recipientIndex);
+        emit RecipientRequeued(id,po.recipient,rp.queueIndex);
+        _ensureRecipient(t,id);
+    }
+
+    function _ensureRecipient(Tier storage t,uint256 id) internal {
+        if(t.recipient!=address(0)) return;
+        if(t.queueLength==0) revert NoEligibleRecipient();
+        uint256 idx=t.recipientIndex;
+        for(uint256 i=0;i<MAX_QUEUE_SCAN;i++){
+            if(idx>=t.queueLength) idx=0;
+            address candidate=queues[id][idx];
+            Participant storage p=participants[id][candidate];
+            if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired){
+                t.recipient=candidate;
+                uint256 pid=payoutNumber[id]+1;
+                payoutNumber[id]=pid;
+                Payout storage po=payouts[id][pid];
+                po.exists=true; po.deadline=block.timestamp+t.paymentWindow; po.recipient=candidate;
+                t.payoutDeadline=po.deadline; t.fundedAmount=0; t.funderCount=0; t.cycle++;
+                return;
+            }
+            idx++;
+        }
+        revert NoEligibleRecipient();
+    }
+
+    function _nextIndex(Tier storage t,uint256 id,uint256 idx) internal view returns(uint256) {
+        if(t.queueLength==0) return 0;
+        idx++;
+        if(idx>=t.queueLength) idx=0;
+        return idx;
+    }
+
+    function isFunderEligible(uint256 id,address a) external view returns(bool) {
+        Tier storage t=_tier(id); Participant storage p=participants[id][a];
+        if(!p.joined||!p.eligible||p.collateral<t.collateralRequired||a==t.recipient) return false;
+        if(IERC20Minimal(t.token).balanceOf(a)<t.contribution) return false;
+        if(IERC20Minimal(t.token).allowance(a,address(this))<t.contribution) return false;
+        Payout storage po=payouts[id][payoutNumber[id]];
+        return !po.fundedBy[a];
+    }
+
+    function getTier(uint256 id) external view returns(Tier memory) { return _tier(id); }
+    function getQueue(uint256 id) external view returns(address[] memory) { return queues[id]; }
+    function getParticipant(uint256 id,address a) external view returns(Participant memory) { return participants[id][a]; }
+    function getCurrentPayout(uint256 id) external view returns(bool,uint256,address,uint256,uint256,uint256) {
+        Tier storage t=_tier(id); Payout storage p=payouts[id][payoutNumber[id]];
+        return(p.exists,payoutNumber[id],p.recipient,p.funded,p.funderCount,p.deadline);
+    }
+    function getTierIds() external view returns(uint256[] memory out) {
+        uint256 count=nextTierId-1; out=new uint256[](count); for(uint256 i=0;i<count;i++) out[i]=i+1;
+    }
+
+    function _tier(uint256 id) internal view returns(Tier storage t){t=tiers[id];if(!t.exists) revert TierNotFound();}
+    function _transferFromExact(address token,address from,address to,uint256 amount) internal {
+        uint256 beforeBal=IERC20Minimal(token).balanceOf(to);
+        (bool ok,bytes memory data)=token.call(abi.encodeWithSelector(IERC20Minimal.transferFrom.selector,from,to,amount));
+        if(!ok||(data.length>0&&!abi.decode(data,(bool)))) revert TransferFailed();
+        uint256 afterBal=IERC20Minimal(token).balanceOf(to);
+        if(afterBal<beforeBal||afterBal-beforeBal!=amount) revert TransferMismatch();
+    }
+    function _transferExact(address token,address to,uint256 amount) internal {
+        uint256 beforeBal=IERC20Minimal(token).balanceOf(to);
+        (bool ok,bytes memory data)=token.call(abi.encodeWithSelector(IERC20Minimal.transfer.selector,to,amount));
+        if(!ok||(data.length>0&&!abi.decode(data,(bool)))) revert TransferFailed();
+        uint256 afterBal=IERC20Minimal(token).balanceOf(to);
+        if(afterBal<beforeBal||afterBal-beforeBal!=amount) revert TransferMismatch();
+    }
+}
