@@ -52,11 +52,11 @@ describe("Liholiswano tier waiting-list protocol",function(){
   const first=f.users.find(u=>u.address.toLowerCase()!==recipient.toLowerCase());
   await f.app.refreshFunder(x.id);
   await ethers.provider.send("evm_increaseTime",[3601]);await ethers.provider.send("evm_mine",[]);
-  const before=await f.t.balanceOf(recipient.address);
+  const before=await f.t.balanceOf(recipient);
   await f.app.defaultCurrentFunder(x.id);
   const p=await f.app.getParticipant(x.id,first.address);
   expect(p.collateral).eq(x.collateral-x.contribution);expect(p.eligible).eq(false);
-  expect(await f.t.balanceOf(recipient.address)).eq(before+x.contribution);
+  expect(await f.t.balanceOf(recipient)).eq(before+x.contribution);
   await f.app.connect(first).approve(f.app.target,ethers.MaxUint256);
   await f.app.connect(first).restoreCollateral(x.id);
   const restored=await f.app.getParticipant(x.id,first.address);
