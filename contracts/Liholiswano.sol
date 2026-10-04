@@ -238,7 +238,7 @@ contract Liholiswano {
    candidate=nextParticipant[id][candidate];
    if(candidate==t.head)break;
   }
-  revert NoEligibleFunder();
+  return;
  }
 
  function _append(Tier storage t,uint256 id,address a) internal {
