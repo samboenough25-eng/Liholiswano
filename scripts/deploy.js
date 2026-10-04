@@ -3,7 +3,7 @@ async function main(){
  const [deployer]=await ethers.getSigners();const network=await ethers.provider.getNetwork();
  if(network.chainId!==97n)throw new Error("Wrong network: expected BNB Smart Chain Testnet (97)");
  const balance=await ethers.provider.getBalance(deployer.address);if(balance===0n)throw new Error("Deployer wallet has 0 native balance.");
- const F=await ethers.getContractFactory("Liholiswano");const protocol=await F.deploy(deployer.address,0);await protocol.waitForDeployment();
+ const F=await ethers.getContractFactory("Liholiswano");const protocol=await F.deploy(deployer.address);await protocol.waitForDeployment();
  const T=await ethers.getContractFactory("MockUSDT");const mock=await T.deploy(deployer.address,ethers.parseUnits("1000000",6));await mock.waitForDeployment();
  await (await protocol.setApprovedToken(mock.target,true)).wait();
  const collateral=ethers.parseUnits(process.env.TESTNET_TIER1_COLLATERAL||"200",6),payout=ethers.parseUnits(process.env.TESTNET_TIER1_PAYOUT||"1000",6),window=Number(process.env.TESTNET_PAYMENT_WINDOW_SECONDS||3600);
