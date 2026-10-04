@@ -6,7 +6,7 @@ describe("Liholiswano tier waiting-list protocol",function(){
   const [owner,...users]=await ethers.getSigners();
   const T=await ethers.getContractFactory("MockUSDT"); const t=await T.deploy(owner.address,ethers.parseUnits("1000000",6)); await t.waitForDeployment();
   for(const u of users) await t.mint(u.address,ethers.parseUnits("5000",6));
-  const F=await ethers.getContractFactory("Liholiswano"); const app=await F.deploy(owner.address,0); await app.waitForDeployment(); await app.setApprovedToken(t.target,true);
+  const F=await ethers.getContractFactory("Liholiswano"); const app=await F.deploy(owner.address); await app.waitForDeployment(); await app.setApprovedToken(t.target,true);
   return {owner,t,app,users};
  }
  async function setup(f,count=11){
