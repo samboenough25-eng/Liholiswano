@@ -2,10 +2,10 @@
 // This script never uses real USDT/USDC and must only run on BSC Testnet.
 const { ethers } = require("ethers");
 
-const RPC = process.env.BSC_TESTNET_RPC_URL || "https://bsc-testnet.bnbchain.org";
+const RPC = process.env.BSC_TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.bnbchain.org:8545";
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
-const CONTRACT = process.env.BNB_CONTRACT_ADDRESS || "0xe9b104260c940fAE26a73e4E9c952fD18fFd2014";
-const TOKEN = process.env.TEST_TOKEN_CONTRACT || "0xb516a4a0ec39e3CBa5baDAE5524E05F43EB66C29";
+const CONTRACT = process.env.BNB_CONTRACT_ADDRESS;
+const TOKEN = process.env.TEST_TOKEN_CONTRACT;
 const SUBSCRIPTION = process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
 // Keep the E2E gas budget deliberately small. BSC Testnet gas is inexpensive;
 // the test only needs enough tBNB for each temporary member's transactions.
@@ -13,6 +13,8 @@ const MEMBER_GAS_FUND = ethers.parseEther(process.env.TESTNET_MEMBER_GAS_FUND ||
 const OWNER_GAS_RESERVE = ethers.parseEther(process.env.TESTNET_OWNER_GAS_RESERVE || "0.05");
 
 if (!PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is required");
+if (!CONTRACT || !ethers.isAddress(CONTRACT)) throw new Error("BNB_CONTRACT_ADDRESS is required for a fresh E2E");
+if (!TOKEN || !ethers.isAddress(TOKEN)) throw new Error("TEST_TOKEN_CONTRACT is required for a fresh E2E");
 
 const provider = new ethers.JsonRpcProvider(RPC);
 const owner = new ethers.Wallet(PRIVATE_KEY, provider);
