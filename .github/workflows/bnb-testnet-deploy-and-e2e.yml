@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   deploy-and-e2e:
@@ -28,10 +28,9 @@ jobs:
       - name: Validate deployment secrets and network
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
         run: |
           test -n "$DEPLOYER_PRIVATE_KEY" || { echo "DEPLOYER_PRIVATE_KEY is missing"; exit 1; }
-          test -n "$BSC_TESTNET_RPC_URL" || { echo "BSC_TESTNET_RPC_URL is missing"; exit 1; }
           DEPLOYER_PRIVATE_KEY="$DEPLOYER_PRIVATE_KEY" BSC_TESTNET_RPC_URL="$BSC_TESTNET_RPC_URL" node - <<'NODE'
           const { ethers } = require("ethers");
           (async () => {
@@ -49,7 +48,7 @@ jobs:
       - name: Deploy fresh Testnet contracts
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL }}
+          BSC_TESTNET_RPC_URL: ${{ secrets.BSC_TESTNET_RPC_URL || 'https://data-seed-prebsc-1-s1.bnbchain.org:8545' }}
         run: |
           npx hardhat run scripts/deploy.js --network bscTestnet | tee deploy-output.txt
           CONTRACT=$(grep '^LIHOLISWANO_CONTRACT=' deploy-output.txt | cut -d= -f2)
@@ -78,6 +77,34 @@ jobs:
           SUBSCRIPTION_CONTRACT_ADDRESS: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
           SUBSCRIPTIONS_ENABLED: "false"
         run: node scripts/e2e-testnet.js
+      - name: Sync verified deployment addresses into customer dApp
+        env:
+          LIHOLISWANO_CONTRACT: ${{ env.BNB_CONTRACT_ADDRESS }}
+          TEST_TOKEN_CONTRACT: ${{ env.TEST_TOKEN_CONTRACT }}
+          SUBSCRIPTION_CONTRACT: ${{ env.SUBSCRIPTION_CONTRACT_ADDRESS }}
+        run: |
+          node - <<'NODE'
+          const fs = require("fs");
+          const file = "web/config.js";
+          let s = fs.readFileSync(file, "utf8");
+          const values = {
+            contractAddress: process.env.LIHOLISWANO_CONTRACT,
+            tokenAddress: process.env.TEST_TOKEN_CONTRACT,
+            subscriptionContractAddress: process.env.SUBSCRIPTION_CONTRACT
+          };
+          for (const [key, value] of Object.entries(values)) {
+            if (!/^0x[0-9a-fA-F]{40}$/.test(value || "")) throw new Error("Invalid " + key);
+            const re = new RegExp(key + ":\\s*[^,]+");
+            if (!re.test(s)) throw new Error("Missing " + key);
+            s = s.replace(re, key + ":" + JSON.stringify(value));
+          }
+          fs.writeFileSync(file, s);
+          NODE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/config.js
+          git diff --cached --quiet && echo "No config changes required" || (git commit -m "chore: sync verified BNB testnet deployment addresses" && git push origin bnb-app-complete)
+
       - name: Save deployment record
         uses: actions/upload-artifact@v4
         with:
