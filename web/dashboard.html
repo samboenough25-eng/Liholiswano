@@ -41,11 +41,11 @@ $("waLink").onclick=async()=>{try{if(!token)throw Error("Sign in first.");const 
 $("login").onclick=async()=>{try{const d=await api("/api/auth/login",{method:"POST",body:JSON.stringify({email:$("email").value,password:$("password").value})});token=d.token;localStorage.setItem("lhs_token",token);await refresh()}catch(e){$("status").textContent=e.message}};
 $("logout").onclick=()=>{token="";localStorage.removeItem("lhs_token");$("status").textContent="Signed out."};
 $("groups").onclick=refresh;$("activity").onclick=refresh;let currentKycCase=null;
-function renderGroups(groups){
+function escapeHtml(v){return String(v??"").replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;","'":"&#39;"}[c]));}\nfunction renderGroups(groups){
   if(!groups?.length){$("groupsOut").textContent="No savings groups are available yet.";return;}
   $("groupsOut").innerHTML=groups.map(g=>{
     const id=String(g.onchain_group_id||"");
-    return "<div class='group-item'><strong>"+String(g.name||"Savings group")+"</strong><div class='muted'>"+String(g.country||"")+" · "+String(g.member_count??0)+" members</div><code>"+id+"</code><br><a href="./dapp.html" style="display:inline-block;margin-top:8px;color:#087f5b;font-weight:800">Open savings dApp →</a></div>";
+    return "<div class='group-item'><strong>"+escapeHtml(g.name||"Savings group")+"</strong><div class='muted'>"+escapeHtml(g.country||"")+" · "+escapeHtml(g.member_count??0)+" members</div><code>"+escapeHtml(id)+"</code><br><a href='./dapp.html' style='display:inline-block;margin-top:8px;color:#087f5b;font-weight:800'>Open savings dApp →</a></div>";
   }).join("");
 }
 async function loadStageAKyc(){
