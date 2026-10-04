@@ -35,7 +35,7 @@ jobs:
         run: npm run compile
       - name: Contract tests
         run: npm test
-      - name: Local ROSCA E2E
+      - name: Local tier waiting-list E2E
         run: npm run e2e:local
       - name: Web validation
         run: npm run validate:web
