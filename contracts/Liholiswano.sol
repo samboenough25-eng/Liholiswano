@@ -167,7 +167,7 @@ contract Liholiswano {
   if(block.timestamp>=po.deadline)revert PaymentClosed();
   if(msg.sender!=po.currentFunder)revert NotCurrentFunder();
   _transferFromExact(t.token,msg.sender,address(this),t.contribution);
-  po.currentFunder=address(0);po.funded+=t.contribution;po.funderCount++;
+  po.currentFunder=address(0);po.fundedBy[msg.sender]=true;po.funded+=t.contribution;po.funderCount++;
   participants[id][msg.sender].fundedCount++;
   emit FunderPaid(id,payoutNumber[id],msg.sender,t.contribution,po.funderCount);
   if(po.funderCount==FUNDERS_PER_PAYOUT)_payRecipient(t,id);
@@ -183,7 +183,7 @@ contract Liholiswano {
   if(funder==address(0))revert NoEligibleFunder();
   if(block.timestamp<po.deadline)revert DeadlineNotReached();
   Participant storage p=participants[id][funder];if(p.collateral<t.contribution)revert InsufficientCollateral();
-  po.currentFunder=address(0);p.collateral-=t.contribution;p.eligible=false;p.defaultCount++;
+  po.currentFunder=address(0);po.fundedBy[funder]=true;p.collateral-=t.contribution;p.eligible=false;p.defaultCount++;
   po.funded+=t.contribution;po.defaultedAmount+=t.contribution;po.funderCount++;
   _transferExact(t.token,po.recipient,t.contribution);
   emit FunderDefaulted(id,payoutNumber[id],funder,t.contribution,p.collateral);
@@ -230,7 +230,7 @@ contract Liholiswano {
   if(candidate==address(0))revert NoEligibleFunder();
   for(uint256 i=0;i<MAX_QUEUE_SCAN;i++){
    if(candidate==address(0))candidate=t.head;
-   if(candidate!=po.recipient){
+   if(candidate!=po.recipient&&!po.fundedBy[candidate]){
     Participant storage p=participants[id][candidate];
     if(p.joined&&p.eligible&&p.collateral>=t.collateralRequired&&IERC20Minimal(t.token).balanceOf(candidate)>=t.contribution&&IERC20Minimal(t.token).allowance(candidate,address(this))>=t.contribution){
      po.currentFunder=candidate;po.deadline=block.timestamp+t.paymentWindow;emit FunderAssigned(id,payoutNumber[id],candidate,po.deadline);return;
