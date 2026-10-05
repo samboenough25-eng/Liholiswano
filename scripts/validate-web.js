@@ -10,7 +10,7 @@ if(!protocol.includes("ROUND_SIZE = 11"))throw new Error("V1 fixed round size is
 if(!protocol.includes("OBLIGATIONS_PER_MEMBER = 10"))throw new Error("V1 obligation invariant is missing");
 if(!protocol.includes("BLOCKED_RECOVERY"))throw new Error("V1 recovery state is missing");
 for(const [name,source] of [["web/dapp.html",dapp],["web/owner.html",owner],["web/dashboard.html",fs.readFileSync("web/dashboard.html","utf8")],["web/authorize.html",fs.readFileSync("web/authorize.html","utf8")],["web/register.html",fs.readFileSync("web/register.html","utf8")]]){
-  const scripts=[...source.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(s=>s.trim());
+  const scripts=[...source.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(m=>m[1]).filter(s=>s.trim());
   if(!scripts.length)throw new Error("No inline scripts found in "+name);
   for(let i=0;i<scripts.length;i++)new vm.Script(scripts[i],{filename:name+"#script"+(i+1)});
 }
