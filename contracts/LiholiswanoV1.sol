@@ -76,7 +76,7 @@ contract LiholiswanoV1 {
     mapping(address => bool) public approvedToken;
     mapping(uint256 => Tier) private tiers;
     mapping(uint256 => uint256) public latestRoundId;
-    mapping(uint256 => Round) private rounds;
+    mapping(uint256 => mapping(uint256 => Round)) private rounds;
     mapping(uint256 => mapping(uint256 => Position)) private positions;
     mapping(uint256 => mapping(uint256 => mapping(uint8 => mapping(uint8 => Obligation)))) private obligations;
     mapping(uint256 => mapping(address => Participant)) private participants;
@@ -185,16 +185,16 @@ contract LiholiswanoV1 {
         bool active
     ) external onlyOwner live {
         if (tierId < 1 || tierId > 5) revert InvalidConfig();
+        uint256 expectedPayout = tierId == 1 ? 200e6 : tierId == 2 ? 400e6 : tierId == 3 ? 600e6 : tierId == 4 ? 800e6 : 100e6;
+        if (payout != expectedPayout) revert InvalidConfig();
         if (!approvedToken[token] || token.code.length == 0) revert NotApprovedToken();
         if (payout == 0 || payout % 10 != 0 || collateralRequired != payout / 5) revert InvalidConfig();
         if (targetWindow == 0 || maxWindow < targetWindow) revert InvalidConfig();
 
         uint256 contribution = payout / 10;
         Tier storage t = tiers[tierId];
-        if (t.exists && latestRoundId[tierId] != 0) {
-            Round storage r = rounds[latestRoundId[tierId]];
-            if (r.active) revert InvalidConfig();
-        }
+        if (t.exists && latestRoundId[tierId] != 0 && rounds[tierId][latestRoundId[tierId]].active) revert InvalidConfig();
+        if (waitingList[tierId].length != 0) revert InvalidConfig();
         t.exists = true; t.active = active; t.token = token;
         t.payout = payout; t.contribution = contribution; t.collateralRequired = collateralRequired;
         t.targetWindow = targetWindow; t.maxWindow = maxWindow;
@@ -257,6 +257,7 @@ contract LiholiswanoV1 {
         uint256 amount = p.collateral;
         if (amount == 0) revert CannotWithdraw();
         p.collateral = 0;
+        p.joined = false;
         _transferExact(r.token, msg.sender, amount);
         emit CollateralWithdrawn(tierId, roundId, msg.sender, amount);
     }
@@ -268,6 +269,8 @@ contract LiholiswanoV1 {
         Obligation storage o = _obligation(tierId, roundId, recipientIndex, funderIndex);
         if (o.status != ObligationStatus.OPEN) revert AlreadyResolved();
         if (msg.sender != o.funder) revert NotFunder();
+        Participant storage payer = participants[tierId][msg.sender];
+        if (payer.collateral < r.collateralRequired) revert InsufficientEligibility();
         if (block.timestamp >= o.dueAt) revert PaymentClosed();
         _transferFromExact(r.token, msg.sender, address(this), o.amount);
         o.status = ObligationStatus.PAID;
@@ -287,7 +290,7 @@ contract LiholiswanoV1 {
         if (p.collateral < o.amount) {
             o.status = ObligationStatus.BLOCKED_RECOVERY;
             emit ObligationBlocked(tierId, roundId, recipientIndex, funderIndex, o.funder, o.amount);
-            revert InsufficientCollateral();
+            return;
         }
 
         p.collateral -= o.amount;
@@ -377,7 +380,7 @@ contract LiholiswanoV1 {
     function _activateNextRound(uint256 tierId) internal {
         Tier storage t = _tier(tierId);
         uint256 roundId = latestRoundId[tierId] + 1;
-        Round storage r = rounds[roundId];
+        Round storage r = rounds[tierId][roundId];
         r.exists = true; r.active = true; r.tierId = tierId; r.id = roundId;
         r.token = t.token; r.payout = t.payout; r.contribution = t.contribution;
         r.collateralRequired = t.collateralRequired; r.targetWindow = t.targetWindow; r.maxWindow = t.maxWindow;
@@ -441,7 +444,7 @@ contract LiholiswanoV1 {
     }
 
     function _resolveObligation(uint256 tierId, uint256 roundId, uint8 recipientIndex, uint8 funderIndex, bool) internal {
-        Round storage r = rounds[roundId];
+        Round storage r = rounds[tierId][roundId];
         Position storage pos = positions[tierId][roundId][recipientIndex];
         Obligation storage o = obligations[tierId][roundId][recipientIndex][funderIndex];
         pos.resolvedAmount += o.amount;
@@ -456,7 +459,7 @@ contract LiholiswanoV1 {
     }
 
     function _tryCompleteRound(uint256 tierId, uint256 roundId) internal {
-        Round storage r = rounds[roundId];
+        Round storage r = rounds[tierId][roundId];
         if (r.settledPositions != ROUND_SIZE || r.resolvedObligations != ROUND_SIZE * OBLIGATIONS_PER_MEMBER) return;
         r.active = false; r.complete = true;
         for (uint8 i = 0; i < ROUND_SIZE; i++) {
