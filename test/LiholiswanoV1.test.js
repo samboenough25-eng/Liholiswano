@@ -202,4 +202,16 @@ describe("LiholiswanoV1 fixed-round D-B protocol", function () {
     expect((await f.app.getParticipant(1,member)).joined).eq(false);
     expect(await f.token.balanceOf(member)).eq(before + r.collateralRequired);
   });
+  it("freezes the collateral token while any participant remains joined", async () => {
+    const f = await fixture();
+    await joinEleven(f, 1);
+    const Token = await ethers.getContractFactory("MockUSDT");
+    const token2 = await Token.deploy(f.owner.address, ethers.parseUnits("1000000", 6));
+    await token2.waitForDeployment();
+    await f.app.setApprovedToken(token2.target, true);
+    await expect(
+      f.app.configureTier(1, token2.target, ethers.parseUnits("200",6), ethers.parseUnits("40",6), 12*3600, 24*3600, true)
+    ).to.be.revertedWithCustomError(f.app, "InvalidConfig");
+  });
+
 });
