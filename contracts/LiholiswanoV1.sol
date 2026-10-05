@@ -189,7 +189,9 @@ contract LiholiswanoV1 {
         if (payout != expectedPayout) revert InvalidConfig();
         if (!approvedToken[token] || token.code.length == 0) revert NotApprovedToken();
         if (payout == 0 || payout % 10 != 0 || collateralRequired != payout / 5) revert InvalidConfig();
-        if (targetWindow == 0 || maxWindow < targetWindow) revert InvalidConfig();
+        uint256 expectedTarget = tierId == 1 ? 12 hours : tierId == 5 ? 12 hours : tierId == 2 ? 24 hours : tierId == 3 ? 24 hours : 24 hours;
+        uint256 expectedMax = tierId == 1 ? 24 hours : tierId == 2 ? 36 hours : tierId == 3 ? 48 hours : tierId == 4 ? 48 hours : 24 hours;
+        if (targetWindow != expectedTarget || maxWindow != expectedMax) revert InvalidConfig();
 
         uint256 contribution = payout / 10;
         Tier storage t = tiers[tierId];
