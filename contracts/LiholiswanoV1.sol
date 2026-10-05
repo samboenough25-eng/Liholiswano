@@ -423,7 +423,7 @@ contract LiholiswanoV1 {
         // O(n) housekeeping is deliberately separated from financial settlement.
         uint256 n = q.length;
         for (uint256 i = 0; i < n; i++) {
-            bool keep = !waitingListed[tierId][q[i]];
+            bool keep = participants[tierId][q[i]].waiting;
             if (keep) q[cursor++] = q[i];
         }
         while (q.length > cursor) q.pop();
