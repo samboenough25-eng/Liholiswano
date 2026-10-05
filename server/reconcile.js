@@ -1,333 +1,74 @@
 require("dotenv").config();
 const {Pool}=require("pg");
-const {JsonRpcProvider,Interface,Contract,isAddress,formatUnits,getAddress}=require("ethers");
+const {JsonRpcProvider,Interface,Contract,isAddress,getAddress}=require("ethers");
 const {PROTOCOL_ABI}=require("./blockchain");
-const {SUBSCRIPTION_ABI}=require("./subscriptions");
 
 const CHAIN_ID=Number(process.env.BSC_CHAIN_ID||97);
 const CONTRACT=process.env.BNB_CONTRACT_ADDRESS;
-const SUBSCRIPTION_CONTRACT=process.env.SUBSCRIPTION_CONTRACT_ADDRESS;
 const RPC=process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||"https://bsc-testnet-dataseed.bnbchain.org";
 const CONFIRMATIONS=Number(process.env.INDEXER_CONFIRMATIONS||3);
 const MAX_RANGE=Math.max(10,Number(process.env.RECONCILIATION_MAX_RANGE||100));
-const START=process.env.RECONCILIATION_START_BLOCK==null||process.env.RECONCILIATION_START_BLOCK===""?null:Number(process.env.RECONCILIATION_START_BLOCK);
-
 const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==="false"?false:{rejectUnauthorized:false}});
-const rpc=new JsonRpcProvider(RPC);
-const iface=new Interface(PROTOCOL_ABI);
-const subscriptionIface=new Interface(SUBSCRIPTION_ABI);
-const ERC20=new Interface([
- "event Transfer(address indexed from,address indexed to,uint256 value)",
- "function decimals() view returns (uint8)",
- "function symbol() view returns (string)"
-]);
+const rpc=new JsonRpcProvider(RPC),iface=new Interface(PROTOCOL_ABI);
 
-function eq(a,b){return String(a??"").toLowerCase()===String(b??"").toLowerCase();}
-function safe(v){return typeof v==="bigint"?v.toString():v;}
-function jsonSafe(v){if(typeof v==="bigint")return v.toString();if(Array.isArray(v))return v.map(jsonSafe);if(v&&typeof v==="object"){const o={};for(const [k,x] of Object.entries(v)){if(!/^\d+$/.test(k))o[k]=jsonSafe(x);}return o;}return v;}
-function add(list,category,entityType,entityKey,expected,actual,severity="critical"){list.push({severity,category,entityType,entityKey,expected,actual});}
-
+function add(xs,category,entity,expected,actual,severity="critical"){xs.push({severity,category,entity,expected,actual});}
+async function safeBlock(){const latest=await rpc.getBlockNumber();const finalized=await rpc.getBlock("finalized").catch(()=>null);return finalized?.number!=null?Math.min(latest,Number(finalized.number)):Math.max(0,latest-CONFIRMATIONS);}
 async function ensureSchema(){
- if(process.env.REQUIRE_DEDICATED_RPC==="true"&&!process.env.BSC_RPC_URL)throw new Error("A dedicated BSC_RPC_URL is required for production reconciliation");
- await pool.query(`
-  create table if not exists reconciliation_state(
-    chain_id bigint primary key, contract_address varchar(42) not null,
-    last_processed_block bigint not null default -1, last_block_hash varchar(66),
-    updated_at timestamptz not null default now()
-  );
-  create table if not exists reconciliation_discrepancies(
-    id uuid primary key default gen_random_uuid(), run_id uuid references reconciliation_runs(id) on delete cascade,
-    severity varchar(16) not null, category varchar(64) not null, entity_type varchar(64),
-    entity_key varchar(255), expected jsonb not null default '{}'::jsonb, actual jsonb not null default '{}'::jsonb,
-    resolved_at timestamptz, resolution_note text, created_at timestamptz not null default now()
-  );
-  create index if not exists idx_recon_discrepancies_open on reconciliation_discrepancies(created_at desc) where resolved_at is null;
-  create index if not exists idx_recon_discrepancies_run on reconciliation_discrepancies(run_id);
-  create table if not exists reconciliation_projection(
-    id uuid primary key default gen_random_uuid(), chain_id bigint not null, contract_address varchar(42) not null,
-    tx_hash varchar(66) not null, log_index integer not null, event_name varchar(96) not null,
-    group_id varchar(66), wallet_address varchar(42), user_id uuid references users(id) on delete set null,
-    asset_symbol varchar(16), asset_decimals integer, amount numeric(78,0), direction varchar(8),
-    ledger_entry_id uuid references ledger_entries(id) on delete set null, block_number bigint not null,
-    created_at timestamptz not null default now(), unique(chain_id,tx_hash,log_index,event_name)
-  );
-  create table if not exists reconciliation_member_snapshots(
-    id uuid primary key default gen_random_uuid(), run_id uuid references reconciliation_runs(id) on delete cascade,
-    group_id varchar(66) not null, wallet_address varchar(42) not null,
-    active boolean not null, defaulted boolean not null, won_this_rotation boolean not null,
-    contributed_this_round boolean not null, bid_submitted boolean not null, bid_bps bigint not null,
-    total_wins bigint not null, total_contributed numeric(78,0) not null, total_received numeric(78,0) not null,
-    block_number bigint not null, created_at timestamptz not null default now(),
-    unique(run_id,group_id,wallet_address)
-  );
-  create index if not exists idx_recon_member_snapshot_group on reconciliation_member_snapshots(group_id,created_at desc);
+ await pool.query(`create table if not exists v1_reconciliation_runs(
+ id uuid primary key default gen_random_uuid(), chain_id bigint not null, contract_address varchar(42) not null,
+ started_at timestamptz not null default now(), finished_at timestamptz, status varchar(32) not null,
+ discrepancy_count integer not null default 0, report jsonb not null default '{}'::jsonb);
+ create table if not exists v1_round_snapshots(
+ run_id uuid not null, tier_id integer not null, round_id bigint not null, active boolean not null, complete boolean not null,
+ token varchar(42), payout numeric, contribution numeric, collateral_required numeric, deadline bigint,
+ settled_positions integer, resolved_obligations integer, members jsonb not null, primary key(run_id,tier_id,round_id));
+ create table if not exists v1_obligation_snapshots(
+ run_id uuid not null,tier_id integer not null,round_id bigint not null,recipient_index integer not null,
+ funder_index integer not null,funder varchar(42),amount numeric,due_at bigint,status integer,primary key(run_id,tier_id,round_id,recipient_index,funder_index));
  `);
 }
-
-async function safeBlock(){
- const latest=await rpc.getBlockNumber();
- try{const b=await rpc.getBlock("finalized");if(b?.number!=null)return Math.min(latest,Number(b.number));}catch{}
- return Math.max(0,latest-CONFIRMATIONS);
-}
-async function loadCursor(){
- const r=await pool.query("select last_processed_block,last_block_hash,contract_address from reconciliation_state where chain_id=$1",[CHAIN_ID]);
- if(!r.rowCount)return {block:START!==null?START-1:-1,hash:null};
- const row=r.rows[0];
- if(!eq(row.contract_address,CONTRACT)){
-   // A fresh protocol deployment is a new reconciliation domain. Preserve the
-   // old run/discrepancy history, but explicitly classify open findings tied
-   // to the superseded contract instead of carrying them into the new domain.
-   await pool.query(`update reconciliation_discrepancies d
-     set resolved_at=now(),resolution_note=$2
-     from reconciliation_runs rr
-     where d.run_id=rr.id and d.resolved_at is null and rr.contract_address<>$1`,
-     [CONTRACT,"Superseded by a new BNB protocol contract deployment; retained as historical reconciliation evidence."]);
-   await pool.query("delete from reconciliation_state where chain_id=$1",[CHAIN_ID]);
-   return {block:START!==null?START-1:-1,hash:null};
- }
- return {block:Number(row.last_processed_block),hash:row.last_block_hash||null};
-}
-async function saveCursor(block,hash){
- await pool.query(`insert into reconciliation_state(chain_id,contract_address,last_processed_block,last_block_hash,updated_at)
- values($1,$2,$3,$4,now())
- on conflict(chain_id) do update set contract_address=excluded.contract_address,last_processed_block=excluded.last_processed_block,last_block_hash=excluded.last_block_hash,updated_at=now()`,
- [CHAIN_ID,CONTRACT,block,hash]);
-}
-async function verifyCursor(cursor){
- if(cursor.block<0||!cursor.hash)return;
- const b=await rpc.getBlock(cursor.block);
- if(!b)throw new Error(`Reconciliation cursor block \${cursor.block} is unavailable`);
- if(b.hash&&!eq(b.hash,cursor.hash))throw new Error("Reconciliation cursor hash changed; explicit reorg recovery is required");
-}
-async function fetchLogsAdaptive(fromBlock,toBlock){
- if(fromBlock>toBlock)return [];
- let lastError;
- for(let attempt=0;attempt<4;attempt++){
-  try{return await rpc.getLogs({address:CONTRACT,fromBlock,toBlock});}
-  catch(e){
-   lastError=e;
-   const message=String(e?.shortMessage||e?.message||e);
-   const retryable=/rate.?limit|too many requests|-32005|timeout|timed out|server error/i.test(message);
-   if(!retryable)throw e;
-   await new Promise(r=>setTimeout(r,Math.min(8000,1000*(2**attempt))));
-  }
- }
- if(fromBlock===toBlock)throw lastError;
- const mid=fromBlock+Math.floor((toBlock-fromBlock)/2);
- return (await fetchLogsAdaptive(fromBlock,mid)).concat(await fetchLogsAdaptive(mid+1,toBlock));
-}
-async function rangeLogs(from,to){
- return fetchLogsAdaptive(from,to);
-}
-
-async function tokenInfo(address,cache){
- const key=address.toLowerCase(); if(cache.has(key))return cache.get(key);
- const c=new Contract(address,ERC20,rpc);
- let info={symbol:"UNKNOWN",decimals:18};
- try{info={symbol:String(await c.symbol()),decimals:Number(await c.decimals())};}catch{}
- cache.set(key,info); return info;
-}
-async function chainGroup(id){
- const c=new Contract(CONTRACT,PROTOCOL_ABI,rpc),g=await c.getGroup(id);
- return {exists:g[0],locked:g[1],admin:g[2],token:getAddress(g[3]),contribution:g[4].toString(),collateral:g[5].toString(),
-  maxMembers:Number(g[6]),maxBidBps:Number(g[7]),round:Number(g[8]),rotation:Number(g[9]),reserve:g[10].toString(),
-  uncoveredShortfall:g[11].toString(),roundDeadline:Number(g[12]),escrowBalance:g[13].toString(),memberCount:Number(g[14])};
-}
-async function memberState(group,wallet){
- const c=new Contract(CONTRACT,PROTOCOL_ABI,rpc),m=await c.getMember(group,wallet);
- return {account:getAddress(m[0]),active:m[1],defaulted:m[2],wonThisRotation:m[3],contributedThisRound:m[4],
-  bidSubmitted:m[5],bidBps:Number(m[6]),totalWins:Number(m[7]),totalContributed:m[8].toString(),totalReceived:m[9].toString()};
-}
-async function contractTokenBalance(token){
- const c=new Contract(token,[ "function balanceOf(address) view returns(uint256)" ],rpc);
- return (await c.balanceOf(CONTRACT)).toString();
-}
-async function receiptTransfers(txHash,token){
- const receipt=await rpc.getTransactionReceipt(txHash);
- if(!receipt)return null;
- const transfers=[];
- for(const log of receipt.logs){
-  if(log.address.toLowerCase()!==token.toLowerCase())continue;
-  try{
-   const p=ERC20.parseLog({topics:log.topics,data:log.data});
-   if(p)transfers.push({from:getAddress(p.args.from),to:getAddress(p.args.to),value:p.args.value.toString()});
-  }catch{}
- }
- return {status:Number(receipt.status),blockNumber:Number(receipt.blockNumber),transfers};
-}
-async function recoverTransactionRequestFromEvent(ev){
- const map={MemberJoined:"join",ContributionPaid:"contribute",BidSubmitted:"bid"};
- const operation=map[ev.event_name]; if(!operation)return;
- const args=ev.args||{};
- const wallet=String(args.member||"").toLowerCase(); const group=String(args.groupId||"").toLowerCase();
- if(!wallet||!group)return;
- const q=await pool.query(`select id,user_id,status,request_json from transaction_requests
-   where chain_id=$1 and lower(contract_address)=lower($2) and operation=$3
-     and lower(wallet_address)=lower($4) and lower(onchain_group_id)=lower($5)
-     and status in ('prepared','signed','submitted','reconciliation_required')
-   order by created_at desc limit 1`,[CHAIN_ID,CONTRACT,operation,wallet,group]);
- if(!q.rowCount)return;
- const r=q.rows[0];
- const u=await pool.query(`update transaction_requests set status='confirmed',tx_hash=$2,confirmed_at=now(),submitted_at=coalesce(submitted_at,now()),updated_at=now(),error_message=null where id=$1 and status<>'confirmed' returning id`,[r.id,ev.tx_hash]);
- if(u.rowCount){
-   await pool.query("insert into transaction_events(transaction_request_id,status,tx_hash,metadata) values($1,'confirmed',$2,$3)",[r.id,ev.tx_hash,JSON.stringify({source:"reconciliation",event:ev.event_name,logIndex:ev.log_index})]);
-   await pool.query("insert into blockchain_transactions(user_id,chain_id,tx_hash,contract_address,action,status,block_number,block_hash,payload,confirmed_at) values($1,$2,$3,$4,$5,'confirmed',$6,$7,$8,now()) on conflict(tx_hash) do nothing",[r.user_id,CHAIN_ID,ev.tx_hash,CONTRACT,operation,ev.block_number,null,JSON.stringify({source:"reconciliation",event:ev.event_name,onchainGroupId:group})]);
- }
-}
-async function projectFinancialEvent(ev,runId,tokenCache,discrepancies){
- if(!["ContributionPaid","RoundSettled"].includes(ev.event_name))return;
- const args=ev.args||{},group=String(args.groupId),wallet=String(args.member||args.winner),token=(await chainGroup(group)).token;
- const ti=await tokenInfo(token,tokenCache);
- const raw=String(ev.event_name==="ContributionPaid"?args.amount:args.payout);
- const direction=ev.event_name==="ContributionPaid"?"debit":"credit";
- const user=await pool.query("select u.id from users u join wallets w on w.user_id=u.id where w.chain_id=$1 and lower(w.address)=lower($2) and w.verified_at is not null limit 1",[CHAIN_ID,wallet]);
- const userId=user.rowCount?user.rows[0].id:null;
- const ref=`chain:\${CHAIN_ID}:\${ev.tx_hash}:\${ev.log_index}`;
- let ledgerId=null;
- const existing=await pool.query("select id from ledger_entries where reference=$1 limit 1",[ref]);
- if(existing.rowCount)ledgerId=existing.rows[0].id;
- else if(userId){
-  const amount=formatUnits(BigInt(raw),ti.decimals);
-  const ins=await pool.query(`insert into ledger_entries(user_id,group_id,entry_type,asset_symbol,chain_id,amount,direction,status,reference,metadata)
-   select $1,g.id,$2,$3,$4,$5,$6,'confirmed',$7,$8 from groups g
-   where g.chain_id=$4 and g.onchain_group_id=$9 returning id`,
-   [userId,ev.event_name==="ContributionPaid"?"rosca.contribution":"rosca.payout",ti.symbol,CHAIN_ID,amount,direction,ref,
-    JSON.stringify({txHash:ev.tx_hash,logIndex:ev.log_index,rawAmount:raw,groupId:group}),group]);
-  if(ins.rowCount)ledgerId=ins.rows[0].id;
- }
- if(!userId)add(discrepancies,"unmapped_financial_wallet","financial_event",ref,{verifiedWalletMapping:true},{wallet}, "warning");
- if(!ledgerId)add(discrepancies,"missing_ledger_entry","financial_event",ref,{ledgerReference:ref},{ledgerEntry:false},"critical");
- const receipt=await receiptTransfers(ev.tx_hash,token);
- if(!receipt)add(discrepancies,"missing_receipt","financial_event",ref,{receipt:true},{receipt:false},"critical");
- else if(receipt.status!==1)add(discrepancies,"failed_receipt","financial_event",ref,{status:1},{status:receipt.status},"critical");
- else{
-  if(ev.event_name==="ContributionPaid"){
-   const match=receipt.transfers.some(t=>eq(t.from,wallet)&&eq(t.to,CONTRACT)&&t.value===raw);
-   if(!match)add(discrepancies,"contribution_transfer_mismatch","financial_event",ref,{from:wallet,to:CONTRACT,amount:raw},{transfers:receipt.transfers},"critical");
-  }else{
-   const totalOut=receipt.transfers.filter(t=>eq(t.from,CONTRACT)).reduce((n,t)=>n+BigInt(t.value),0n);
-   const expected=BigInt(raw)+BigInt(args.bidAmount||0);
-   if(totalOut!==expected)add(discrepancies,"settlement_transfer_mismatch","financial_event",ref,{outgoingTotal:expected.toString()},{outgoingTotal:totalOut.toString(),transfers:receipt.transfers},"critical");
-  }
- }
- await pool.query(`insert into reconciliation_projection(chain_id,contract_address,tx_hash,log_index,event_name,group_id,wallet_address,user_id,asset_symbol,asset_decimals,amount,direction,ledger_entry_id,block_number)
- values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
- on conflict(chain_id,tx_hash,log_index,event_name) do update set user_id=excluded.user_id,ledger_entry_id=excluded.ledger_entry_id`,
- [CHAIN_ID,CONTRACT,ev.tx_hash,ev.log_index,ev.event_name,group,wallet,userId,ti.symbol,ti.decimals,raw,direction,ledgerId,ev.block_number]);
-}
-async function reconcileGroups(runId,discrepancies,tokenCache){
- const c=new Contract(CONTRACT,PROTOCOL_ABI,rpc),ids=await c.getGroupIds();
- const dbGroups=await pool.query("select * from groups where chain_id=$1",[CHAIN_ID]);
- const byId=new Map(dbGroups.rows.map(g=>[String(g.onchain_group_id).toLowerCase(),g]));
- const escrowByToken=new Map();
- for(const rawId of ids){
-  const id=String(rawId),cg=await chainGroup(rawId),db=byId.get(id.toLowerCase());
-  const currentBalance=BigInt(await contractTokenBalance(cg.token));
-  escrowByToken.set(cg.token.toLowerCase(),(escrowByToken.get(cg.token.toLowerCase())||0n)+BigInt(cg.escrowBalance));
-  if(!db){add(discrepancies,"missing_group","group",id,{onchainGroupId:id},{database:false},"warning");continue;}
-  if(db.contract_address&&!eq(db.contract_address,CONTRACT))add(discrepancies,"contract_mismatch","group",id,{contract:CONTRACT},{contract:db.contract_address});
-  const dbToken=db.metadata?.token||null;
-  if(dbToken&&!eq(dbToken,cg.token))add(discrepancies,"token_mismatch","group",id,{token:cg.token},{token:dbToken});
-  const members=await pool.query("select user_id,wallet_address,status from group_memberships where group_id=$1",[db.id]);
-  if(members.rowCount!==cg.memberCount)add(discrepancies,"member_count_mismatch","group",id,{memberCount:cg.memberCount},{memberCount:members.rowCount});
-  for(const m of members.rows){
-   try{
-    const cm=await memberState(rawId,m.wallet_address);
-    await pool.query(`insert into reconciliation_member_snapshots(run_id,group_id,wallet_address,active,defaulted,won_this_rotation,contributed_this_round,bid_submitted,bid_bps,total_wins,total_contributed,total_received,block_number)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-     [runId,id,m.wallet_address,cm.active,cm.defaulted,cm.wonThisRotation,cm.contributedThisRound,cm.bidSubmitted,cm.bidBps,cm.totalWins,cm.totalContributed,cm.totalReceived,await safeBlock()]);
-    if(cm.active!== (m.status==="active"))add(discrepancies,"member_status_mismatch","membership",m.wallet_address,{active:m.status==="active"},{active:cm.active,defaulted:cm.defaulted});
-    if(!eq(cm.account,m.wallet_address))add(discrepancies,"member_address_mismatch","membership",m.wallet_address,{account:m.wallet_address},{account:cm.account});
-   }catch(e){add(discrepancies,"member_read_error","membership",m.wallet_address,{readable:true},{error:e.message},"critical");}
-  }
-  if(BigInt(await contractTokenBalance(cg.token))<BigInt(cg.escrowBalance))
-   add(discrepancies,"group_escrow_exceeds_token_balance","group",id,{tokenBalanceAtLeast:cg.escrowBalance},{tokenBalance:await contractTokenBalance(cg.token)},"critical");
- }
- for(const [token,sum] of escrowByToken){
-  const balance=BigInt(await contractTokenBalance(token));
-  if(balance<sum)add(discrepancies,"aggregate_escrow_exceeds_token_balance","token",token,{escrowTotalAtMost:sum.toString()},{tokenBalance:balance.toString()},"critical");
- }
- return ids.length;
-}
-async function reconcileSubscriptions(from,to,discrepancies){
- if(!SUBSCRIPTION_CONTRACT||!isAddress(SUBSCRIPTION_CONTRACT))return;
- const logs=[];
- for(let a=from;a<=to;a+=MAX_RANGE){
-  const b=Math.min(to,a+MAX_RANGE-1);
-  try{logs.push(...await rpc.getLogs({address:SUBSCRIPTION_CONTRACT,fromBlock:a,toBlock:b}));}
-  catch(e){add(discrepancies,"subscription_log_read_error","subscription_range",String(a)+"-"+String(b),{readable:true},{error:e.message},"critical");return;}
- }
- for(const log of logs){
-  let p;try{p=subscriptionIface.parseLog({topics:log.topics,data:log.data});}catch{continue;}
-  if(!p||p.name!=="SubscriptionPaid")continue;
-  const key=String(p.args.subscriptionKey);
-  const q=await pool.query("select id,status,token_address,token_amount_base_units,customer_key,period_start,subscription_contract from subscription_payments where lower(subscription_key)=lower($1) limit 1",[key]);
-  if(!q.rowCount){add(discrepancies,"subscription_unmapped_event","subscription_event",String(log.transactionHash)+":"+log.index,{subscriptionKey:key},{databasePayment:false},"warning");continue;}
-  const payment=q.rows[0];
-  const expectedPeriod=Math.floor(new Date(payment.period_start).getTime()/1000);
-  const ok=String(p.args.customerKey).toLowerCase()===String(payment.customer_key).toLowerCase() &&
-    String(p.args.token).toLowerCase()===String(payment.token_address).toLowerCase() &&
-    BigInt(p.args.amount)===BigInt(payment.token_amount_base_units) &&
-    Number(p.args.periodStart)===expectedPeriod &&
-    String(log.address).toLowerCase()===String(payment.subscription_contract).toLowerCase();
-  if(!ok){add(discrepancies,"subscription_event_mismatch","subscription_payment",String(payment.id),{subscriptionKey:key,amount:String(payment.token_amount_base_units)},{event:p.args},"critical");continue;}
-  await pool.query("update subscription_payments set status='confirmed',tx_hash=$2,confirmed_at=coalesce(confirmed_at,now()),updated_at=now(),error_message=null where id=$1 and status<>'confirmed'",[payment.id,log.transactionHash]);
-  await pool.query("insert into subscription_events(payment_id,event_type,metadata) values($1,'confirmed_reconciled',$2)",[payment.id,JSON.stringify({txHash:log.transactionHash,logIndex:log.index,source:"reconciliation"})]);
- }
-}
-async function reconcileTransactionRequests(discrepancies){
- const q=await pool.query("select tx_hash,action,status,chain_id,contract_address,id from blockchain_transactions where chain_id=$1 and tx_hash is not null order by submitted_at desc limit 200",[CHAIN_ID]);
- for(const row of q.rows){
-  const receipt=await rpc.getTransactionReceipt(row.tx_hash);
-  if(!receipt){if(row.status==="confirmed")add(discrepancies,"confirmed_tx_missing_receipt","blockchain_transaction",row.tx_hash,{receipt:true},{receipt:false},"critical");continue;}
-  if(Number(receipt.status)!==1 && row.status==="confirmed")add(discrepancies,"confirmed_tx_failed_onchain","blockchain_transaction",row.tx_hash,{receiptStatus:1},{receiptStatus:Number(receipt.status)},"critical");
-  if(row.contract_address&&!eq(row.contract_address,CONTRACT))add(discrepancies,"transaction_contract_mismatch","blockchain_transaction",row.tx_hash,{contract:CONTRACT},{contract:row.contract_address});
- }
-}
 async function run(){
- if(CHAIN_ID!==97)throw new Error("Stage 3 reconciler currently supports BNB Testnet chain 97 only");
+ if(CHAIN_ID!==97)throw new Error("V1 reconciler currently supports BNB Testnet chain 97 only");
  if(!CONTRACT||!isAddress(CONTRACT))throw new Error("BNB_CONTRACT_ADDRESS is missing or invalid");
  if(!process.env.DATABASE_URL)throw new Error("DATABASE_URL is not configured");
  await ensureSchema();
- const lock=await pool.query("select pg_try_advisory_lock(hashtext('liholiswano-bnb-reconciliation')) locked");
+ const lock=await pool.query("select pg_try_advisory_lock(hashtext('liholiswano-bnb-v1-reconciliation')) locked");
  if(!lock.rows[0].locked)return {status:"already_running"};
  try{
-  const latest=await rpc.getBlockNumber(),safe=await safeBlock();
-  const cursor=await loadCursor();await verifyCursor(cursor);
-  const from=Math.max(cursor.block+1,START!==null?START:0);
-  const to=Math.min(safe,from+MAX_RANGE-1);
-  const run=await pool.query(`insert into reconciliation_runs(chain_id,contract_address,from_block,to_block,status,details)
-   values($1,$2,$3,$4,'running',$5) returning id`,
-   [CHAIN_ID,CONTRACT,from,to,JSON.stringify({mode:"financial-reconciliation",latestBlock:latest,safeBlock:safe})]);
-  const runId=run.rows[0].id,discrepancies=[],tokenCache=new Map();
+  const c=new Contract(CONTRACT,PROTOCOL_ABI,rpc),safe=await safeBlock(),latest=await rpc.getBlockNumber(),discrepancies=[];
+  const code=await rpc.getCode(CONTRACT);if(!code||code==="0x")throw new Error("V1 protocol contract has no code");
+  const rr=await pool.query("insert into v1_reconciliation_runs(chain_id,contract_address,status) values($1,$2,'running') returning id",[CHAIN_ID,getAddress(CONTRACT)]);
+  const runId=rr.rows[0].id;
   try{
-   const code=await rpc.getCode(CONTRACT);if(!code||code==="0x")throw new Error("Protocol contract has no code");
-   const groupCount=await reconcileGroups(runId,discrepancies,tokenCache);
-   if(from<=to){
-    const logs=await rangeLogs(from,to),chainFacts=new Map();
-    for(const log of logs){try{const p=iface.parseLog({topics:log.topics,data:log.data});if(p)chainFacts.set(`\${log.transactionHash}:\${log.index}`,p.name);}catch{}}
-    const indexed=await pool.query("select tx_hash,log_index,event_name from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4",[CHAIN_ID,CONTRACT,from,to]);
-    const indexedFacts=new Map(indexed.rows.map(r=>[`\${r.tx_hash}:\${r.log_index}`,r.event_name]));
-    for(const [key,name] of chainFacts)if(!indexedFacts.has(key))add(discrepancies,"indexer_missing_event","chain_event",key,{eventName:name},{indexed:false},"critical");
-    for(const [key,name] of indexedFacts)if(!chainFacts.has(key))add(discrepancies,"indexer_orphan_event","chain_event",key,{onchain:false},{indexedEvent:name},"critical");
-    const facts=await pool.query("select tx_hash,log_index,event_name,args,block_number from chain_events where chain_id=$1 and contract_address=$2 and block_number between $3 and $4 order by block_number,log_index",[CHAIN_ID,CONTRACT,from,to]);
-    for(const ev of facts.rows){try{await recoverTransactionRequestFromEvent(ev); await projectFinancialEvent(ev,runId,tokenCache,discrepancies);}catch(e){add(discrepancies,"projection_error","chain_event",`\${ev.tx_hash}:\${ev.log_index}`,{projectable:true},{error:e.message},"critical");}}
+   for(let tierId=1;tierId<=5;tierId++){
+    const rid=Number(await c.latestRoundId(tierId));if(!rid)continue;
+    const r=await c.getRound(tierId,rid);
+    const members=r[15].map(getAddress);
+    const unique=new Set(members.map(x=>x.toLowerCase()));
+    if(members.length!==11||unique.size!==11)add(discrepancies,"round_member_count_or_uniqueness",`tier:${tierId}:round:${rid}`,{members:11,unique:11},{members:members.length,unique:unique.size});
+    await pool.query("insert into v1_round_snapshots values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",[runId,tierId,rid,r[1],r[2],r[5],r[6].toString(),r[7].toString(),r[8].toString(),Number(r[12]),Number(r[13]),Number(r[14]),JSON.stringify(members)]);
+    let resolved=0;
+    for(let i=0;i<11;i++){
+     const pos=await c.getPosition(tierId,rid,i);let sum=0n,count=0;
+     for(let j=0;j<11;j++){
+      if(i===j)continue;
+      const o=await c.getObligation(tierId,rid,i,j),status=Number(o[3]);
+      if(o[0].toLowerCase()!==members[j].toLowerCase())add(discrepancies,"funder_mismatch",`tier:${tierId}:round:${rid}:p:${i}:f:${j}`,{funder:members[j]},{funder:o[0]});
+      if(BigInt(o[1])!==BigInt(r[7]))add(discrepancies,"obligation_amount_mismatch",`tier:${tierId}:round:${rid}:p:${i}:f:${j}`,{amount:String(r[7])},{amount:String(o[1])});
+      if(Number(o[2])!==Number(r[12]))add(discrepancies,"obligation_deadline_mismatch",`tier:${tierId}:round:${rid}:p:${i}:f:${j}`,{dueAt:Number(r[12])},{dueAt:Number(o[2])});
+      if(status===2||status===3){sum+=BigInt(o[1]);count++;resolved++;}
+      await pool.query("insert into v1_obligation_snapshots values($1,$2,$3,$4,$5,$6,$7,$8,$9)",[runId,tierId,rid,i,j,o[0],o[1].toString(),Number(o[2]),status]);
+     }
+     if(BigInt(pos[1])!==sum||Number(pos[2])!==count)add(discrepancies,"position_aggregation_mismatch",`tier:${tierId}:round:${rid}:position:${i}`,{amount:sum.toString(),count},{amount:String(pos[1]),count:Number(pos[2])});
+     if(pos[3]&&(count!==10||sum!==BigInt(r[6])))add(discrepancies,"settled_position_not_fully_covered",`tier:${tierId}:round:${rid}:position:${i}`,{count:10,amount:String(r[6])},{count,amount:sum.toString()});
+    }
+    if(r[2]&&(Number(r[13])!==11||Number(r[14])!==110))add(discrepancies,"invalid_round_completion",`tier:${tierId}:round:${rid}`,{settled:11,resolved:110},{settled:Number(r[13]),resolved:Number(r[14])});
    }
-   await reconcileTransactionRequests(discrepancies);
-   if(from<=to) await reconcileSubscriptions(from,to,discrepancies);
-   const endHash=to>=0?(await rpc.getBlock(to))?.hash:null;
-   if(to>=from&&endHash)await saveCursor(to,endHash);
    const status=discrepancies.some(x=>x.severity==="critical")?"failed":discrepancies.length?"warning":"completed";
-   const categorySummary=Object.entries(discrepancies.reduce((m,x)=>(m[x.category]=(m[x.category]||0)+1,m),{}));
-   console.log(JSON.stringify({service:"liholiswano-reconciliation",status,runId,latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length,categories:categorySummary}));
-   await pool.query("update reconciliation_runs set status=$2,finished_at=now(),completed_at=now(),details=$3,discrepancy_count=$4,report=$5 where id=$1",
-    [runId,status,JSON.stringify({mode:"financial-reconciliation",latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length}),discrepancies.length,JSON.stringify({discrepancies})]);
-   return {status,runId,latestBlock:latest,safeBlock:safe,fromBlock:from,toBlock:to,groups:groupCount,discrepancies:discrepancies.length};
-  }catch(e){
-   await pool.query("update reconciliation_runs set status='failed',finished_at=now(),completed_at=now(),details=$2 where id=$1",[runId,JSON.stringify({error:e.message})]).catch(()=>{});
-   throw e;
-  }
- }finally{await pool.query("select pg_advisory_unlock(hashtext('liholiswano-bnb-reconciliation'))").catch(()=>{});}
+   await pool.query("update v1_reconciliation_runs set status=$2,finished_at=now(),discrepancy_count=$3,report=$4 where id=$1",[runId,status,discrepancies.length,JSON.stringify({latestBlock:latest,safeBlock:safe,discrepancies})]);
+   return {status,runId,latestBlock:latest,safeBlock:safe,discrepancies:discrepancies.length};
+  }catch(e){await pool.query("update v1_reconciliation_runs set status='failed',finished_at=now(),report=$2 where id=$1",[runId,JSON.stringify({error:e.message})]).catch(()=>{});throw e;}
+ }finally{await pool.query("select pg_advisory_unlock(hashtext('liholiswano-bnb-v1-reconciliation'))").catch(()=>{});}
 }
-if(require.main===module)run().then(r=>{console.log(JSON.stringify({service:"liholiswano-reconciliation",...r}));return pool.end();}).catch(e=>{console.error(JSON.stringify({service:"liholiswano-reconciliation",status:"failed",error:e.message}));pool.end().finally(()=>process.exit(1));});
+if(require.main===module)run().then(r=>{console.log(JSON.stringify({service:"liholiswano-v1-reconciliation",...r}));return pool.end();}).catch(e=>{console.error(JSON.stringify({service:"liholiswano-v1-reconciliation",status:"failed",error:e.message}));pool.end().finally(()=>process.exit(1));});
 module.exports={run};
