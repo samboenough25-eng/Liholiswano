@@ -1,0 +1,25 @@
+name: V1 Conformance
+
+on:
+  push:
+    branches: ["v1.2-conformance-audit"]
+  pull_request:
+    branches: ["main", "v1.2-conformance-audit"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.0"
+          cache: npm
+      - run: npm ci
+      - run: npm run check:all
+      - run: npm run ops:check
+      - run: npm audit --omit=dev --audit-level=high
