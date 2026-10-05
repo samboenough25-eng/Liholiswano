@@ -77,7 +77,7 @@ contract LiholiswanoV1 {
     mapping(uint256 => Tier) private tiers;
     mapping(uint256 => uint256) public latestRoundId;
     mapping(uint256 => mapping(uint256 => Round)) private rounds;
-    mapping(uint256 => mapping(uint256 => Position)) private positions;
+    mapping(uint256 => mapping(uint256 => mapping(uint8 => Position))) private positions;
     mapping(uint256 => mapping(uint256 => mapping(uint8 => mapping(uint8 => Obligation)))) private obligations;
     mapping(uint256 => mapping(address => Participant)) private participants;
 
