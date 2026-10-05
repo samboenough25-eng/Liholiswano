@@ -202,6 +202,31 @@ describe("LiholiswanoV1 fixed-round D-B protocol", function () {
     expect((await f.app.getParticipant(1,member)).joined).eq(false);
     expect(await f.token.balanceOf(member)).eq(before + r.collateralRequired);
   });
+  it("forms deterministic batches of eleven and leaves excess population waiting", async () => {
+    const f = await fixture();
+    for (const u of f.users.slice(0, 23)) {
+      await f.token.connect(u).approve(f.app.target, ethers.MaxUint256);
+      await f.app.connect(u).joinTier(1);
+    }
+    expect((await f.app.latestRoundId(1))).eq(2);
+    expect((await f.app.getRound(1,1)).members.length).eq(11);
+    expect((await f.app.getRound(1,2)).members.length).eq(11);
+    const waiting = await f.app.getWaitingList(1);
+    expect(waiting.length).eq(1);
+    expect(waiting[0]).eq(f.users[22].address);
+    for (const id of [1,2]) {
+      const r = await f.app.getRound(1,id);
+      for (let i=0;i<11;i++) {
+        let count=0;
+        for(let j=0;j<11;j++) if(i!==j){
+          const o=await f.app.getObligation(1,id,i,j);
+          expect(o.amount).eq(r.contribution); expect(o.funder).eq(r.members[j]); count++;
+        }
+        expect(count).eq(10);
+      }
+    }
+  });
+
   it("enforces the canonical target and maximum timing windows", async () => {
     const f = await fixture();
     const expected = {1:[12,24],2:[24,36],3:[24,48],4:[24,48],5:[12,24]};
