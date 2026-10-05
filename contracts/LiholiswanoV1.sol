@@ -82,6 +82,7 @@ contract LiholiswanoV1 {
     mapping(uint256 => mapping(address => Participant)) private participants;
 
     mapping(uint256 => address[]) private waitingList;
+    mapping(uint256 => uint256) private joinedParticipantCount;
     mapping(uint256 => mapping(address => bool)) private waitingListed;
 
     error Unauthorized();
@@ -197,6 +198,7 @@ contract LiholiswanoV1 {
         Tier storage t = tiers[tierId];
         if (t.exists && latestRoundId[tierId] != 0 && rounds[tierId][latestRoundId[tierId]].active) revert InvalidConfig();
         if (waitingList[tierId].length != 0) revert InvalidConfig();
+        if (t.exists && t.token != token && joinedParticipantCount[tierId] != 0) revert InvalidConfig();
         t.exists = true; t.active = active; t.token = token;
         t.payout = payout; t.contribution = contribution; t.collateralRequired = collateralRequired;
         t.targetWindow = targetWindow; t.maxWindow = maxWindow;
@@ -221,6 +223,7 @@ contract LiholiswanoV1 {
         _transferFromExact(t.token, msg.sender, treasury, ENTRY_FEE);
 
         p.joined = true;
+        joinedParticipantCount[tierId] += 1;
         p.collateral = t.collateralRequired;
         _enterWaiting(tierId, msg.sender);
     }
@@ -260,6 +263,7 @@ contract LiholiswanoV1 {
         if (amount == 0) revert CannotWithdraw();
         p.collateral = 0;
         p.joined = false;
+        joinedParticipantCount[tierId] -= 1;
         _transferExact(r.token, msg.sender, amount);
         emit CollateralWithdrawn(tierId, roundId, msg.sender, amount);
     }
