@@ -203,7 +203,7 @@ contract LiholiswanoV1 {
 
     function setTierActive(uint256 tierId, bool active) external onlyOwner {
         Tier storage t = _tier(tierId);
-        if (latestRoundId[tierId] != 0 && rounds[latestRoundId[tierId]].active) revert InvalidConfig();
+        if (latestRoundId[tierId] != 0 && rounds[tierId][latestRoundId[tierId]].active) revert InvalidConfig();
         t.active = active;
         emit TierActivationChanged(tierId, active);
     }
