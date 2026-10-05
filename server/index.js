@@ -342,6 +342,7 @@ app.delete("/api/wallets/:id",auth,async(req,res)=>{const q=await db().query("de
 
 
 
+app.use("/api/kyc",(req,res)=>res.status(410).json({error:"KYC is not part of the V1 financial protocol"}));
 app.get("/api/kyc",auth,async(req,res)=>{const q=await db().query("select id,provider,status,provider_reference,country,submitted_at,reviewed_at,review_reason,created_at,updated_at from kyc_cases where user_id=$1 order by created_at desc",[req.user.id]);res.json({status:req.user.kyc_status,cases:q.rows,providerConfigured:!!process.env.KYC_PROVIDER})});
 app.post("/api/kyc/cases",auth,async(req,res)=>{const country=String(req.body.country||req.user.country);if(country!==req.user.country)return res.status(400).json({error:"KYC country must match the account country"});if(!["BW","SZ"].includes(country))return res.status(400).json({error:"Invalid country"});const provider=String(req.body.provider||process.env.KYC_PROVIDER||"");if(!provider)return res.status(503).json({error:"KYC provider is not configured"});const q=await db().query("insert into kyc_cases(user_id,provider,country,status,submitted_at) values($1,$2,$3,'pending',now()) returning id,status,provider,country,submitted_at",[req.user.id,provider,country]);await db().query("update users set kyc_status='pending',updated_at=now() where id=$1",[req.user.id]);await audit(req.user.id,"kyc.case_created","kyc_case",q.rows[0].id,{provider});res.status(201).json({case:q.rows[0]})});
 
@@ -367,6 +368,7 @@ app.get("/api/support/tickets",auth,async(req,res)=>{const q=await db().query("s
 
 
 
+app.use("/api/groups",(req,res)=>res.status(410).json({error:"Groups are not part of the V1 financial protocol"}));
 app.post("/api/groups",auth,async(req,res)=>{if(!(await financialAccessAllowed(req.user)))return res.status(403).json({error:testnetPilot()?"WhatsApp pilot verification is required":"KYC approval is required"});const name=String(req.body.name||"").trim(),onchain=String(req.body.onchainGroupId||"").trim(),country=String(req.body.country||req.user.country),contractAddress=String(req.body.contractAddress||process.env.BNB_CONTRACT_ADDRESS||"").trim();if(name.length<2||name.length>120||!/^0x[a-fA-F0-9]{64}$/.test(onchain)||!/^0x[a-fA-F0-9]{40}$/.test(contractAddress)||country!==req.user.country||!["BW","SZ"].includes(country))return res.status(400).json({error:"Invalid group data"});try{const q=await db().query("insert into groups(onchain_group_id,name,country,contract_address,chain_id,metadata,created_by) values($1,$2,$3,$4,$5,$6,$7) returning *",[onchain,name,country,contractAddress,configuredChainId,JSON.stringify(req.body.metadata||{}),req.user.id]);await audit(req.user.id,"group.created","group",q.rows[0].id);res.status(201).json({group:q.rows[0]})}catch(e){if(e.code==="23505")return res.status(409).json({error:"Group already recorded"});res.status(400).json({error:"Unable to create group"})}});
 
 
