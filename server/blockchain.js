@@ -1,32 +1,65 @@
-const {JsonRpcProvider,Contract,Wallet}=require("ethers");
-const {assertAddress}=require("./wallet");
+const { JsonRpcProvider, Contract, Wallet, getAddress } = require("ethers");
+const { assertAddress } = require("./wallet");
+
 const DEFAULT_TESTNET_RPC="https://bsc-testnet-dataseed.bnbchain.org";
 function rpcUrl(){
   const url=process.env.BSC_RPC_URL||process.env.BSC_TESTNET_RPC_URL||DEFAULT_TESTNET_RPC;
-  if(process.env.REQUIRE_DEDICATED_RPC==="true"&&!process.env.BSC_RPC_URL)throw new Error("A dedicated BSC_RPC_URL is required for production blockchain operations");
+  if(process.env.REQUIRE_DEDICATED_RPC==="true"&&!process.env.BSC_RPC_URL) throw new Error("A dedicated BSC_RPC_URL is required for production blockchain operations");
   return url;
 }
+
 const PROTOCOL_ABI=[
- "event GroupCreated(bytes32 indexed groupId,address indexed admin,address indexed token)",
- "event MemberJoined(bytes32 indexed groupId,address indexed member)",
- "event GroupLockedEvent(bytes32 indexed groupId,uint256 round,uint256 deadline)",
- "event ContributionPaid(bytes32 indexed groupId,address indexed member,uint256 amount)",
- "event BidSubmitted(bytes32 indexed groupId,address indexed member,uint256 bidBps)",
- "event RoundSettled(bytes32 indexed groupId,uint256 round,address indexed winner,uint256 bidAmount,uint256 payout)",
- "event MemberDefaulted(bytes32 indexed groupId,address indexed member,uint256 collateral,uint256 uncovered)",
- "function getGroupIds() view returns (bytes32[])",
- "function getGroup(bytes32) view returns (bool,bool,address,address,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256,uint256)",
- "function getMember(bytes32,address) view returns (address,bool,bool,bool,bool,bool,uint256,uint32,uint256,uint256)",
- "function joinGroup(bytes32)",
- "function contribute(bytes32)",
- "function submitBid(bytes32,uint256)",
- "function settleRound(bytes32)"
+ "event RoundCreated(uint256 indexed tierId,uint256 indexed roundId,uint256 activatedAt,uint256 deadline)",
+ "event RoundMemberAdded(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed memberIndex,address member)",
+ "event RoundActivated(uint256 indexed tierId,uint256 indexed roundId)",
+ "event PayoutPositionCreated(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,address recipient,uint256 payout)",
+ "event ObligationCreated(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,uint8 funderIndex,address funder,uint256 amount,uint256 dueAt)",
+ "event ObligationPaid(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,uint8 funderIndex,address funder,uint256 amount)",
+ "event ObligationCollateralCovered(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,uint8 funderIndex,address funder,uint256 amount)",
+ "event ObligationBlocked(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,uint8 funderIndex,address funder,uint256 amount)",
+ "event PayoutSettled(uint256 indexed tierId,uint256 indexed roundId,uint8 indexed recipientIndex,address recipient,uint256 amount)",
+ "event ParticipantDefaulted(uint256 indexed tierId,uint256 indexed roundId,address indexed participant,uint256 amount,uint256 defaultCount,uint256 remainingCollateral)",
+ "event CollateralRestored(uint256 indexed tierId,address indexed participant,uint256 amount,uint256 totalCollateral)",
+ "event RoundCompleted(uint256 indexed tierId,uint256 indexed roundId)",
+ "event CollateralWithdrawn(uint256 indexed tierId,uint256 indexed roundId,address indexed participant,uint256 amount)",
+ "event NextRoundOptIn(uint256 indexed tierId,uint256 indexed completedRound,address indexed participant)",
+ "function owner() view returns(address)",
+ "function paused() view returns(bool)",
+ "function treasury() view returns(address)",
+ "function approvedToken(address) view returns(bool)",
+ "function latestRoundId(uint256) view returns(uint256)",
+ "function getTier(uint256) view returns(bool,bool,address,uint256,uint256,uint256,uint256,uint256)",
+ "function getWaitingList(uint256) view returns(address[])",
+ "function getParticipant(uint256,address) view returns(bool,bool,uint256,uint256,uint256,uint256,uint256,uint256)",
+ "function getRound(uint256,uint256) view returns(bool,bool,bool,uint256,uint256,address,uint256,uint256,uint256,uint256,uint256,uint256,uint8,uint8,address[11])",
+ "function getPosition(uint256,uint256,uint8) view returns(address,uint256,uint8,bool)",
+ "function getObligation(uint256,uint256,uint8,uint8) view returns(address,uint256,uint256,uint8)",
+ "function getObligationStatus(uint256,uint256,uint8,uint8) view returns(uint8)",
+ "function payObligation(uint256,uint256,uint8,uint8)",
+ "function processExpiredObligation(uint256,uint256,uint8,uint8)",
+ "function restoreAndResolveBlockedObligation(uint256,uint256,uint8,uint8)",
+ "function settlePayout(uint256,uint256,uint8)"
 ];
-function provider(){return new JsonRpcProvider(rpcUrl());}
-function contract(address,abi=PROTOCOL_ABI){assertAddress(address);return new Contract(address,abi,provider());}
-function signer(){if(!process.env.DEPLOYER_PRIVATE_KEY)throw new Error("DEPLOYER_PRIVATE_KEY is not configured");return new Wallet(process.env.DEPLOYER_PRIVATE_KEY,provider());}
-function writableContract(address,abi=PROTOCOL_ABI){assertAddress(address);return new Contract(address,abi,signer());}
-async function chainInfo(){const p=provider();const n=await p.getNetwork();return {chainId:Number(n.chainId),blockNumber:await p.getBlockNumber()};}
-async function groupState(address,id){const g=await contract(address).getGroup(id);return {exists:g[0],locked:g[1],admin:g[2],token:g[3],contribution:g[4].toString(),collateral:g[5].toString(),maxMembers:Number(g[6]),maxBidBps:Number(g[7]),round:Number(g[8]),rotation:Number(g[9]),reserve:g[10].toString(),uncoveredShortfall:g[11].toString(),roundDeadline:Number(g[12]),escrowBalance:g[13].toString(),memberCount:Number(g[14])};}
-async function memberState(address,id,wallet){const m=await contract(address).getMember(id,wallet);return {account:m[0],active:m[1],defaulted:m[2],wonThisRotation:m[3],contributedThisRound:m[4],bidSubmitted:m[5],bidBps:Number(m[6]),totalWins:Number(m[7]),totalContributed:m[8].toString(),totalReceived:m[9].toString()};}
-module.exports={provider,contract,writableContract,signer,chainInfo,groupState,memberState,PROTOCOL_ABI,rpcUrl};
+
+function provider(){ return new JsonRpcProvider(rpcUrl()); }
+function contract(address,abi=PROTOCOL_ABI){ assertAddress(address); return new Contract(address,abi,provider()); }
+function signer(){ if(!process.env.DEPLOYER_PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is not configured"); return new Wallet(process.env.DEPLOYER_PRIVATE_KEY,provider()); }
+function writableContract(address,abi=PROTOCOL_ABI){ assertAddress(address); return new Contract(address,abi,signer()); }
+
+async function chainInfo(){
+  const p=provider(), n=await p.getNetwork();
+  return {chainId:Number(n.chainId),blockNumber:await p.getBlockNumber()};
+}
+async function tierState(address,id){
+  const t=await contract(address).getTier(id);
+  return {exists:t[0],active:t[1],token:getAddress(t[2]),payout:t[3].toString(),contribution:t[4].toString(),collateralRequired:t[5].toString(),targetWindow:Number(t[6]),maxWindow:Number(t[7])};
+}
+async function participantState(address,id,wallet){
+  const p=await contract(address).getParticipant(id,wallet);
+  return {joined:p[0],waiting:p[1],collateral:p[2].toString(),defaultCount:Number(p[3]),suspendedThroughRound:Number(p[4]),activeRound:Number(p[5]),receivedInActiveRound:p[6],resolvedObligationsInActiveRound:Number(p[7])};
+}
+async function roundState(address,tierId,roundId){
+  const r=await contract(address).getRound(tierId,roundId);
+  return {exists:r[0],active:r[1],complete:r[2],tierId:Number(r[3]),id:Number(r[4]),token:getAddress(r[5]),payout:r[6].toString(),contribution:r[7].toString(),collateralRequired:r[8].toString(),targetWindow:Number(r[9]),maxWindow:Number(r[10]),activatedAt:Number(r[11]),deadline:Number(r[12]),settledPositions:Number(r[13]),resolvedObligations:Number(r[14]),members:r[15].map(getAddress)};
+}
+module.exports={provider,contract,writableContract,signer,chainInfo,tierState,participantState,roundState,PROTOCOL_ABI,rpcUrl};
