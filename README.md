@@ -1,118 +1,77 @@
 # Liholiswano Financial Services Platform
 
-## Active implementation
+Liholiswano is a non-custodial, contract-automated rotating savings platform for BNB Smart Chain.
 
-The active product branch is `bnb-app-complete` and targets BNB Smart Chain. The Solidity contract is the financial authority for group membership, collateral, contributions, bids, deadlines, defaults, settlement and rotation. The browser is a client and does not hold treasury keys.
+## V1 financial model
 
-This branch contains only the active BNB implementation. Obsolete blockchain implementations and duplicate staging packages are intentionally removed so there is one clear source of truth.
+The smart contract is the financial source of truth. The API, indexer and keeper are read/trigger services only; they cannot choose recipients, funders, transfer customer funds, replace obligations or create liquidity.
 
-## Current validation
+Each tier forms fixed rounds of exactly 11 participants.
 
-- `npm run check:all`
-- `npm run compile`
-- `npm test`
-- `npm run e2e:local`
-- `npm run validate:web`
-- `npm run api:check`
+| Tier | Payout | Contribution | Collateral | Target | Maximum |
+|---|---:|---:|---:|---:|---:|
+| 1 | BWP/E200 | BWP/E20 | BWP/E40 | 12h | 24h |
+| 2 | BWP/E400 | BWP/E40 | BWP/E80 | 24h | 36h |
+| 3 | BWP/E600 | BWP/E60 | BWP/E120 | 24h | 48h |
+| 4 | BWP/E800 | BWP/E80 | BWP/E160 | 24h | 48h |
+| 5 | BWP/E100 | BWP/E10 | BWP/E20 | 12h | 24h |
 
-These checks are enforced by the BNB GitHub Actions workflow.
+- P = 10 × C.
+- Every participant receives exactly one payout per round.
+- Every participant has exactly 10 fixed obligations.
+- There are exactly 110 obligations per round.
+- Funding is deterministic and cyclic; no participant funds their own payout.
+- A payout settles independently only when its own ten obligations satisfy F + D = P.
+- F is actual token funding; D is valid collateral coverage from the defaulting funder.
+- Solvent positions may settle out of order.
+- BLOCKED_RECOVERY never transfers the obligation to another participant.
+- Active membership and round parameters are immutable after activation.
+- No mid-round voluntary exit, replacement, bailout or synthetic liquidity.
+- A completed participant may withdraw collateral or explicitly opt into a subsequent round.
+- Entry fee is BWP/E5 when newly joining the tier; continuation does not charge another entry fee.
+- Three or more lifetime defaults classify the participant as HIGH_DEFAULT and suspend entry to the immediately following round.
+- A default consumes exactly one contribution from the defaulting participant's collateral. Restoration is required before another exposed obligation can be paid/default-covered.
+
+## Current implementation branch
+
+v1.2-conformance-audit contains the conformance implementation and draft pull request for review.
+
+The new contract is contracts/LiholiswanoV1.sol. The previous contracts/Liholiswano.sol is retained only as historical prototype code and is not the V1 financial authority.
+
+## Customer and owner dApps
+
+- web/dapp.html: customer wallet interface for waiting-list entry, round status, fixed obligations, collateral recovery and payout settlement.
+- web/owner.html: owner interface for canonical tier configuration, activation and emergency pause only.
+- Customers sign their own token transactions with their wallet.
+- The owner cannot manually select who receives or who funds a payout.
+- WhatsApp may be added as a notification/support channel later, but it is not a transaction signer.
+
+## No-KYC V1 scope
+
+V1 does not require a biometric KYC provider. Registration/account services are separate from the on-chain financial authority. Any future regulated deployment must add the applicable identity, AML, sanctions and legal controls before real-money operation.
+
+## Automation
+
+The keeper can detect expired open obligations, call the deterministic expiry processor, detect independently solvent payout positions, and call deterministic payout settlement. It has no discretionary financial authority.
+
+## Testing
+
+Run:
+
+- npm run compile
+- npm test
+- npm run e2e:local
+- npm run validate:web
+- npm run check:all
+
+The V1 test suite covers canonical tiers, 11-member formation, 110-obligation creation, active-round immutability, independent settlement, cross-position isolation, collateral defaults, blocked recovery, HIGH_DEFAULT suspension, withdrawal and re-entry.
 
 ## Testnet
 
-Current network: BNB Smart Chain Testnet, chain ID 97.
+Current network is BNB Smart Chain Testnet, chain ID 97. Testnet MockUSDT is test money only and is not USDT or USDC.
 
-Actual BNB Testnet deployment requires a dedicated deployer wallet funded with tBNB. The private key belongs only in the GitHub Actions secret `DEPLOYER_PRIVATE_KEY`. Never use a production wallet or share a seed phrase.
+Never commit a private key or seed phrase. Testnet deployment must use a dedicated test wallet funded only with testnet assets.
 
-The Testnet deployment creates the Liholiswano protocol and a Testnet-only MockUSDT token. MockUSDT is not USDT or USDC and must never be used on Mainnet.
+## Security gate
 
-## Security status
-
-The current contract has been hardened with:
-
-- automatic full-group locking
-- contract-enforced round deadlines
-- permissionless deadline default/settlement triggering
-- per-group escrow accounting
-- reentrancy protection
-- exact standard-token transfer checks
-- two-step protocol ownership transfer
-- regression tests for deadline, default, accounting and reentrancy behaviour
-
-The contract is still unaudited. CI success is not a security audit and is not approval for Mainnet or real-money operation.
-
-## Product-level work still required
-
-The active BNB repository is a Testnet financial application foundation, not yet the complete regulated financial-service stack. Remaining gates include production-grade indexing and financial reconciliation, wallet/custody integration, KYC/biometric and AML/compliance provider integrations, notification delivery, monitoring and incident controls, independent security review, production stablecoin configuration, and applicable Botswana/Eswatini legal and compliance preparation.
-
-## Source-of-truth rule
-
-The root Solidity contract, root Hardhat configuration, `server/`, `web/`, `scripts/`, and `.github/workflows/` are the active implementation. There is no second blockchain implementation in this branch.
-
-
-## Stage A KYC workflow
-
-Stage A is a provider-neutral KYC development workflow. It is intentionally usable before a commercial KYC-provider account is available.
-
-Implemented:
-- customer KYC case creation/resume
-- Botswana/Eswatini country binding
-- legal name and date-of-birth capture
-- national-ID/passport selection
-- consent versioning and timestamp
-- identity-document metadata and SHA-256 fingerprint recording
-- no raw identity documents are persisted by Stage A
-- explicit server-side KYC state transitions
-- customer status/history endpoint
-- compliance/admin case queue and case detail
-- authorized manual approval/rejection/request-review decisions
-- immutable-style case event history and audit records
-- provider webhook boundary with HMAC-SHA256 verification and idempotent provider-event handling
-- provider capabilities are exposed so the UI cannot imply that Stage A performed biometric or government-database verification
-
-Stage A does **not** provide real biometric liveness, face matching, government ID database verification, sanctions/PEP screening, or production regulatory assurance. Those are provider/compliance integrations for later stages.
-
-## WhatsApp-first customer architecture
-
-Customers are designed to use Liholiswano primarily through WhatsApp and their verified phone number. The web application is the administrative, compliance and operations interface. WhatsApp commands are authenticated by the linked phone/account and financial actions require wallet authorization before any blockchain transaction is accepted. WhatsApp never directly holds or controls customer funds.
-
-Customer commands include MENU, ACCOUNT, GROUPS, JOIN, CONTRIBUTE, BALANCE, PAYOUT, TX, SUPPORT and HELP. Every financial request is recorded and must reach on-chain confirmation before it is reported as completed.
-
-### WhatsApp production prerequisites
-
-The application contains the webhook, phone-linking, conversation-state and command layers. Production delivery still requires a WhatsApp Business/Cloud API account, permanent access token, phone-number configuration, webhook verification, app secret and approved templates where Meta requires them. These credentials belong in Render environment variables and must never be committed to GitHub.
-
-### Wallet authorization
-
-A verified wallet proves wallet ownership but does not authorize arbitrary financial actions. Production WhatsApp-only financial execution requires a secure signing/custody design, such as a controlled wallet-signing service or an explicitly supported wallet handoff. The API must never silently substitute a server-held treasury key for a customer's wallet.
-
-### Transaction lifecycle
-
-Financial requests use explicit states: prepared, signed, submitted, confirmed, reverted, failed, cancelled, and reconciliation_required. A transaction is not marked successful merely because a request was created; receipt status, chain, sender, target contract, function and group are verified before confirmation.
-
-## Monthly platform subscription
-
-Every registered customer has a separate monthly platform-subscription account:
-- Botswana: P5.00/month
-- Eswatini: E5.00/month
-- payment asset: the configured BSC stablecoin
-- destination: the configured Liholiswano subscription treasury
-- ROSCA escrow and subscription revenue are separate accounting domains
-
-The fiat fee is not converted by a hard-coded arbitrary stablecoin value. The stablecoin base-unit amount must be configured explicitly per country, with an optional recorded FX-rate snapshot. The subscription vault contract emits a unique payment event and prevents replay of the same customer-period payment.
-
-The customer flow is:
-WhatsApp request -> explicit confirmation -> one-time wallet authorization link -> wallet signs -> blockchain receipt -> server verifies event -> WhatsApp confirms payment.
-
-The wallet authorization page is a signing surface only; it never asks for a seed phrase or private key. BNB Chain documentation confirms BSC is EVM-compatible and supports Binance Web3 Wallet, MetaMask and Trust Wallet, and Binance's current DApp testing guidance explicitly covers opening a DApp in the Binance Web3 Wallet browser and sending transactions.
-
-## Reconciliation and recovery
-
-The reconciliation worker now:
-- treats a protocol-contract change as a new reconciliation domain and explicitly classifies open findings from the superseded contract as historical/superseded;
-- verifies on-chain groups, members, escrow and indexed events;
-- recovers prepared/submitted transaction requests from confirmed blockchain events after an API failure;
-- reconciles subscription-vault events back into the subscription ledger;
-- retains unresolved discrepancies instead of hiding them;
-- uses finalized/safe block progress before advancing the reconciliation cursor.
-
-The known historical `missing_group` discrepancy belongs to the previous Testnet contract domain; it is not deleted silently. A fresh deployment starts a new reconciliation domain. New Testnet E2E groups that are intentionally created only for blockchain testing must still be registered/classified before they are treated as production application groups.
+Passing CI does not mean the protocol is safe for mainnet. Before real-money deployment, the V1 contract still requires adversarial token testing, fuzz/property testing, economic stress testing, independent security review, production stablecoin configuration, monitoring/reconciliation validation, and applicable Botswana/Eswatini legal and regulatory preparation.
