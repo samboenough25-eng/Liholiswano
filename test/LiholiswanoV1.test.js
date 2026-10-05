@@ -202,6 +202,19 @@ describe("LiholiswanoV1 fixed-round D-B protocol", function () {
     expect((await f.app.getParticipant(1,member)).joined).eq(false);
     expect(await f.token.balanceOf(member)).eq(before + r.collateralRequired);
   });
+  it("enforces the canonical target and maximum timing windows", async () => {
+    const f = await fixture();
+    const expected = {1:[12,24],2:[24,36],3:[24,48],4:[24,48],5:[12,24]};
+    for (const id of [1,2,3,4,5]) {
+      const t = await f.app.getTier(id);
+      expect(Number(t.targetWindow)).eq(expected[id][0]*3600);
+      expect(Number(t.maxWindow)).eq(expected[id][1]*3600);
+      await expect(
+        f.app.configureTier(id, f.token.target, t.payout, t.collateralRequired, expected[id][0]*3600 + 1, expected[id][1]*3600, true)
+      ).to.be.revertedWithCustomError(f.app, "InvalidConfig");
+    }
+  });
+
   it("freezes the collateral token while any participant remains joined", async () => {
     const f = await fixture();
     await joinEleven(f, 1);
