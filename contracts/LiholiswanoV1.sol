@@ -287,7 +287,7 @@ contract LiholiswanoV1 {
         if (block.timestamp < o.dueAt) revert DeadlineNotReached();
 
         Participant storage p = participants[tierId][o.funder];
-        if (p.collateral < o.amount) {
+        if (p.collateral < r.collateralRequired) {
             o.status = ObligationStatus.BLOCKED_RECOVERY;
             emit ObligationBlocked(tierId, roundId, recipientIndex, funderIndex, o.funder, o.amount);
             return;
@@ -319,7 +319,7 @@ contract LiholiswanoV1 {
         if (msg.sender != o.funder) revert NotFunder();
         Participant storage p = participants[tierId][msg.sender];
         if (p.collateral < o.amount) {
-            uint256 need = o.amount - p.collateral;
+            uint256 need = r.collateralRequired - p.collateral;
             _transferFromExact(r.token, msg.sender, address(this), need);
             p.collateral += need;
         }
