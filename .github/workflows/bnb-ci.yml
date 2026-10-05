@@ -2,7 +2,7 @@ name: BNB compile, test and validate
 
 on:
   push:
-    branches: [main, bnb-app-complete]
+    branches: [main, bnb-app-complete, v1.2-conformance-audit]
   pull_request:
     branches: [main, bnb-app-complete]
 
