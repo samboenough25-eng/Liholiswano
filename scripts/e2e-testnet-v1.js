@@ -54,15 +54,9 @@ async function main() {
   if (pos.resolvedCount !== 10n || pos.resolvedAmount !== r.payout) throw new Error("Full-funded payout position did not resolve");
   await (await app.connect(wallets[0]).settlePayout(1,1,recipientIndex)).wait();
 
-  const defaultRecipient = 1;
-  const defaultFunder = 2;
-  const before = await token.balanceOf(wallets[defaultRecipient].address);
-  await provider.send("evm_increaseTime",[24*3600+2]);
-  await provider.send("evm_mine",[]);
-  await (await app.processExpiredObligation(1,1,defaultRecipient,defaultFunder)).wait();
-  const after = await token.balanceOf(wallets[defaultRecipient].address);
-  if (after - before !== r.contribution) throw new Error("Collateral default did not pay the exact contribution");
-
+  // Public BSC Testnet RPCs do not permit arbitrary timestamp manipulation.
+  // Deadline/default/recovery is therefore exercised by the local E2E suite; this testnet
+  // run verifies the real deployment, wallet approvals, round formation and early settlement.
   console.log("V1_TESTNET_E2E=PASS");
   console.log("CHAIN_ID=97");
   console.log("LIHOLISWANO_V1_CONTRACT=" + app.target);
