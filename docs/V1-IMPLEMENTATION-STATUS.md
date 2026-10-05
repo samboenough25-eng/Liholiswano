@@ -82,3 +82,17 @@ Before deploying this V1 contract to BNB Testnet for live multi-wallet testing, 
 9. only then consider any mainnet preparation.
 
 The existing testnet address must not be treated as a V1 deployment.
+
+## Additional hardening completed on 2026-10-06
+
+- Canonical target/max windows are now enforced on-chain: T1 12h/24h, T2 24h/36h, T3 24h/48h, T4 24h/48h, T5 12h/24h.
+- Collateral token rotation is blocked while any participant remains joined, preventing a completed participant's old-token collateral from being treated as a new-token reserve.
+- Added adversarial token fixtures/tests for false-return, no-return, fee-on-transfer and reentrant callback behavior.
+- Added deterministic 23-participant batching coverage: two active rounds of 11 and one waiting participant.
+- Disabled legacy KYC and group API routes for V1 so those old workflows cannot authorize or create V1 financial groups.
+- Cleaned the environment example to state that V1 financial authorization is not KYC-gated and that legacy subscriptions/groups are outside the V1 protocol.
+- Added a dedicated manual GitHub Actions testnet deployment/E2E workflow. It deploys a fresh V1 contract and mock token and exercises 12 test wallets. Public BSC RPCs cannot time-travel, so deadline/default/recovery remains covered by local deterministic tests; the testnet gate covers real wallet/contract deployment and early settlement.
+
+## Current gate
+
+The branch remains a draft. The old deployed testnet contract address in web/config.js is intentionally not replaced until the fresh V1 testnet deployment succeeds. No claim of fresh-testnet deployment is made yet.
