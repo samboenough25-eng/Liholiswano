@@ -489,7 +489,7 @@ contract LiholiswanoV1 {
         if (!t.exists) revert TierNotFound();
     }
     function _round(uint256 tierId, uint256 roundId) internal view returns (Round storage r) {
-        r = rounds[roundId];
+        r = rounds[tierId][roundId];
         if (!r.exists || r.tierId != tierId) revert RoundNotActive();
     }
     function _position(uint256 tierId, uint256 roundId, uint8 recipientIndex) internal view returns (Position storage p) {
